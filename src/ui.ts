@@ -22,14 +22,72 @@ export const color = {
   cyan: paint(36, 39),
 };
 
+// clack frames every line with a "│  " gutter and the box border, so reserve a
+// few columns. Floor keeps things sane on absurdly narrow terminals.
+const GUTTER = 6;
+const MIN_WIDTH = 24;
+const FALLBACK_WIDTH = 80;
+
+/** Current terminal width, or a sane default when not attached to a TTY. */
+export function terminalColumns(): number {
+  const cols = process.stdout.columns;
+  return cols && cols > 0 ? cols : FALLBACK_WIDTH;
+}
+
+/**
+ * Word-wrap text to the terminal width, preserving existing line breaks and
+ * hard-breaking tokens longer than the line (e.g. URLs or long flags). Used to
+ * keep clack boxes and messages inside the actual terminal.
+ */
+export function wrap(text: string, width = terminalColumns() - GUTTER): string {
+  const limit = Math.max(MIN_WIDTH, width);
+  return text
+    .split('\n')
+    .map((line) => wrapLine(line, limit))
+    .join('\n');
+}
+
+function wrapLine(line: string, limit: number): string {
+  if (line.length <= limit) return line;
+  const out: string[] = [];
+  let current = '';
+  const flush = (): void => {
+    if (current) out.push(current);
+    current = '';
+  };
+  for (const word of line.split(/\s+/)) {
+    if (!word) continue;
+    if (word.length > limit) {
+      flush();
+      for (let i = 0; i < word.length; i += limit) out.push(word.slice(i, i + limit));
+      continue;
+    }
+    if (!current) {
+      current = word;
+    } else if (current.length + 1 + word.length <= limit) {
+      current += ` ${word}`;
+    } else {
+      flush();
+      current = word;
+    }
+  }
+  flush();
+  return out.join('\n');
+}
+
+/** Apply a colour function to each line independently (keeps ANSI per line). */
+export function paintLines(text: string, paint: (s: string) => string): string {
+  return text.split('\n').map(paint).join('\n');
+}
+
 export const intro = (msg: string): void => p.intro(msg);
 export const outro = (msg: string): void => p.outro(msg);
 export const note = (body: string, title?: string): void => p.note(body, title);
-export const logInfo = (msg: string): void => p.log.info(msg);
-export const logWarn = (msg: string): void => p.log.warn(msg);
-export const logError = (msg: string): void => p.log.error(msg);
-export const logSuccess = (msg: string): void => p.log.success(msg);
-export const logMessage = (msg: string): void => p.log.message(msg);
+export const logInfo = (msg: string): void => p.log.info(wrap(msg));
+export const logWarn = (msg: string): void => p.log.warn(wrap(msg));
+export const logError = (msg: string): void => p.log.error(wrap(msg));
+export const logSuccess = (msg: string): void => p.log.success(wrap(msg));
+export const logMessage = (msg: string): void => p.log.message(wrap(msg));
 
 /** True when the user aborted a prompt (Ctrl-C / Esc). */
 export const isCancel = p.isCancel;

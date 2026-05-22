@@ -16,8 +16,10 @@ import {
   logInfo,
   logWarn,
   note,
+  paintLines,
   selectOption,
   textPrompt,
+  wrap,
 } from './ui.ts';
 
 export type FlowOutcome = { kind: 'done' } | { kind: 'revise'; feedback: string };
@@ -33,10 +35,13 @@ export async function presentSuggestion(
 ): Promise<FlowOutcome> {
   const safety = scanCommand(suggestion.command);
 
+  // Wrap to the terminal width first, then colour each line, so the SGR codes
+  // stay within a line and never bleed into clack's box border.
+  const command = paintLines(wrap(suggestion.command), color.bold);
   const body =
     behavior.explain && suggestion.explanation
-      ? `${color.bold(suggestion.command)}\n\n${color.dim(suggestion.explanation)}`
-      : color.bold(suggestion.command);
+      ? `${command}\n\n${paintLines(wrap(suggestion.explanation), color.dim)}`
+      : command;
   note(body, 'Suggested command');
 
   if (safety.dangerous) {
