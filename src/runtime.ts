@@ -44,14 +44,29 @@ export async function ensureDir(path: string, mode = 0o700): Promise<void> {
 }
 
 /**
+ * Build the argv for running `command` in `shell`. We use an INTERACTIVE shell
+ * (`-i`) for bash/zsh/fish so the user's rc file is sourced: aliases, shell
+ * functions, and PATH entries defined in ~/.zshrc / ~/.bashrc all apply, which
+ * is exactly what the user gets when typing the command themselves. A plain
+ * `-c` shell skips the rc file and would miss those (e.g. an aliased CLI).
+ * POSIX sh has no useful interactive rc, so it stays a plain `-c`.
+ */
+function shellInvocation(shell: string, command: string): string[] {
+  const name = shell.slice(shell.lastIndexOf('/') + 1);
+  if (name === 'zsh' || name === 'bash' || name === 'fish') {
+    return ['-i', '-c', command];
+  }
+  return ['-c', command];
+}
+
+/**
  * Run a command in the user's shell, streaming stdout/stderr live to the
  * terminal by inheriting the parent's stdio. Resolves with the exit code.
  */
 export function runInShell(command: string, shell: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    // -c is honored by sh, bash, zsh, fish. The command string is passed
-    // verbatim; the shell performs its own parsing.
-    const child = nodeSpawn(shell, ['-c', command], { stdio: 'inherit' });
+    // The command string is passed verbatim; the shell performs its own parsing.
+    const child = nodeSpawn(shell, shellInvocation(shell, command), { stdio: 'inherit' });
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 0));
   });
