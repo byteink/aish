@@ -15,7 +15,10 @@ export class OpenAIProvider implements Provider {
   }
 
   chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
-    return streamOpenAICompat(this.baseUrl, this.model, messages, this.apiKey, opts);
+    // Only send reasoning_effort when thinking is explicitly enabled: passing it
+    // to a non-reasoning model (e.g. gpt-4o) is rejected with a 400.
+    const extra = opts?.think ? { reasoning_effort: 'high' } : {};
+    return streamOpenAICompat(this.baseUrl, this.model, messages, this.apiKey, opts, extra);
   }
 
   listModels(): Promise<string[]> {

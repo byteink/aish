@@ -61,9 +61,13 @@ export function buildInteractivePrompt(ctx: ShellContext): string {
  * or a chat message (interactive) when it is not valid JSON.
  */
 export function parseReply(raw: string, mode: 'oneshot' | 'interactive'): ModelReply {
+  // Drop reasoning models' <think> blocks before anything else, so their
+  // contents never leak into the command/explanation or break extraction.
+  const cleaned = stripFences(stripThinking(raw));
+
   // Weak models often emit a valid object surrounded by prose, or several
   // objects. Take the first balanced object that yields a command or message.
-  for (const obj of extractJsonObjects(stripFences(raw))) {
+  for (const obj of extractJsonObjects(cleaned)) {
     const reply = interpretJson(obj);
     if (reply) return reply;
   }
@@ -73,7 +77,7 @@ export function parseReply(raw: string, mode: 'oneshot' | 'interactive'): ModelR
   // when it is a single short line; otherwise it is almost certainly rambling
   // prose, and treating that as an executable command (and possibly auto-
   // running it) would be unsafe, so we surface it as a message instead.
-  const text = stripFences(raw).trim();
+  const text = cleaned.trim();
   if (mode === 'interactive') return { type: 'chat', message: text };
   if (looksLikeCommand(text)) {
     return { type: 'command', command: text, explanation: 'No explanation provided.' };
@@ -156,4 +160,16 @@ function matchBrace(text: string, start: number): number {
 
 function stripFences(raw: string): string {
   return raw.replace(/```(?:json)?/gi, '').trim();
+}
+
+/**
+ * Remove reasoning blocks emitted by thinking models. Handles a closed
+ * `<think>...</think>` (or `<thinking>`) as well as an unterminated trailing
+ * block (model cut off mid-thought).
+ */
+function stripThinking(raw: string): string {
+  return raw
+    .replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(think|thinking)>[\s\S]*$/i, '')
+    .trim();
 }

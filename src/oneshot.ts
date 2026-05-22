@@ -24,7 +24,10 @@ export async function runOneShot(request: string, config: Config): Promise<void>
   for (let i = 0; i < MAX_REVISIONS; i++) {
     let raw: string;
     try {
-      raw = await collectWithSpinner(provider.chat(messages), 'Thinking');
+      raw = await collectWithSpinner(
+        provider.chat(messages, { think: config.behavior.think }),
+        'Thinking',
+      );
     } catch (err) {
       logError(`Generation failed: ${(err as Error).message}`);
       process.exitCode = 1;

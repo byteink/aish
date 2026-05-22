@@ -27,6 +27,12 @@ describe('applySetting', () => {
     expect(next.behavior.explain).toBe(false);
   });
 
+  test('toggles the think flag', () => {
+    expect(base.behavior.think).toBe(false);
+    const next = applySetting(base, 'behavior.think', 'true');
+    expect(next.behavior.think).toBe(true);
+  });
+
   test('rejects a non-boolean for a boolean flag', () => {
     expect(() => applySetting(base, 'behavior.explain', 'nope')).toThrow();
   });

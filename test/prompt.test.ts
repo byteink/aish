@@ -44,6 +44,24 @@ describe('parseReply', () => {
     expect(r.type).toBe('chat');
   });
 
+  test('strips a <think> block before the command JSON', () => {
+    const raw =
+      '<think>The user wants disk usage. I should use du.</think>\n' +
+      '{"command":"du -sh *","explanation":"sizes of entries"}';
+    const r = parseReply(raw, 'oneshot');
+    expect(r.type).toBe('command');
+    if (r.type === 'command') {
+      expect(r.command).toBe('du -sh *');
+      expect(r.explanation).not.toContain('think');
+    }
+  });
+
+  test('strips an unterminated trailing <think> block', () => {
+    const raw = '{"type":"chat","message":"hi"}\n<think>still reasoning and cut off';
+    const r = parseReply(raw, 'interactive');
+    expect(r).toEqual({ type: 'chat', message: 'hi' });
+  });
+
   test('takes the first object when the model emits several plus prose', () => {
     const messy = [
       'ls -l | sort -nrh | head -n 10',

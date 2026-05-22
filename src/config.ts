@@ -17,6 +17,12 @@ export interface BehaviorConfig {
   includeHistory: boolean;
   /** Include `git status` summary when inside a repository. */
   includeGit: boolean;
+  /**
+   * Ask reasoning-capable models to think before answering. Off is faster and
+   * usually enough for command generation; on can help with tricky requests.
+   * `<think>` blocks are always stripped from the reply regardless.
+   */
+  think: boolean;
 }
 
 export interface Config {
@@ -39,6 +45,7 @@ export const DEFAULT_BEHAVIOR: BehaviorConfig = {
   explain: true,
   includeHistory: false,
   includeGit: true,
+  think: false,
 };
 
 export function configDir(): string {
@@ -128,6 +135,9 @@ export function applySetting(config: Config, key: string, value: string): Config
     case 'behavior.includeGit':
       next.behavior.includeGit = parseBool(value, key);
       return next;
+    case 'behavior.think':
+      next.behavior.think = parseBool(value, key);
+      return next;
     default:
       throw new Error(`unknown config key: ${key}`);
   }
@@ -168,6 +178,7 @@ function validate(input: unknown): Config {
       explain: asBool(behavior.explain, DEFAULT_BEHAVIOR.explain),
       includeHistory: asBool(behavior.includeHistory, DEFAULT_BEHAVIOR.includeHistory),
       includeGit: asBool(behavior.includeGit, DEFAULT_BEHAVIOR.includeGit),
+      think: asBool(behavior.think, DEFAULT_BEHAVIOR.think),
     },
   };
   if (typeof obj.apiKey === 'string') config.apiKey = obj.apiKey;

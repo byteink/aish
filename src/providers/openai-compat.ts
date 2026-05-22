@@ -20,19 +20,25 @@ function authHeaders(apiKey?: string): Record<string, string> {
   return headers;
 }
 
-/** Stream a chat completion as text chunks from any OpenAI-compatible endpoint. */
+/**
+ * Stream a chat completion as text chunks from any OpenAI-compatible endpoint.
+ * `extraBody` carries provider-specific fields (e.g. reasoning controls) that
+ * are merged into the request body.
+ */
 export async function* streamOpenAICompat(
   baseUrl: string,
   model: string,
   messages: Message[],
   apiKey: string | undefined,
   opts: ChatOptions | undefined,
+  extraBody: Record<string, unknown> = {},
 ): AsyncGenerator<string, void, unknown> {
   const body = {
     model,
     messages,
     stream: true,
     ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    ...extraBody,
   };
 
   const fetchInit: RequestInit = {
@@ -59,6 +65,15 @@ export async function* streamOpenAICompat(
     const piece = parsed.choices?.[0]?.delta?.content;
     if (piece) yield piece;
   }
+}
+
+/**
+ * Map the `think` flag to the `reasoning_effort` field understood by reasoning
+ * models. Returns `{}` when `think` is undefined so default behaviour is kept.
+ */
+export function reasoningBody(think: boolean | undefined): Record<string, unknown> {
+  if (think === undefined) return {};
+  return { reasoning_effort: think ? 'high' : 'low' };
 }
 
 /** List model ids from an OpenAI-compatible `/models` endpoint. */

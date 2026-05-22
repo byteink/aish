@@ -73,6 +73,7 @@ Slash commands:
 | `/clear` | clear conversation history |
 | `/model` | switch model |
 | `/provider` | switch provider (re-run setup) |
+| `/think` | toggle model reasoning on/off |
 | `/help` | list commands |
 
 ## Providers
@@ -123,6 +124,7 @@ Keys: `provider`, `baseUrl`, `model`, `apiKey`, and `behavior.*`:
 | `behavior.explain` | `true` | show the one-line explanation |
 | `behavior.includeHistory` | `false` | include recent shell history as context |
 | `behavior.includeGit` | `true` | include `git status` when in a repo |
+| `behavior.think` | `false` | ask reasoning models to think first (slower); `<think>` blocks are always stripped from the reply |
 
 ### Context awareness
 

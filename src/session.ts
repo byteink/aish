@@ -30,6 +30,7 @@ const SLASH_HELP = [
   '/clear     clear conversation history',
   '/model     switch model',
   '/provider  switch provider (re-run setup)',
+  '/think     toggle model reasoning on/off',
   '/help      show this help',
 ].join('\n');
 
@@ -77,7 +78,10 @@ export class Session {
     for (let i = 0; i < MAX_REVISIONS; i++) {
       let raw: string;
       try {
-        raw = await collectWithSpinner(this.provider.chat(this.messages), 'Thinking');
+        raw = await collectWithSpinner(
+          this.provider.chat(this.messages, { think: this.config.behavior.think }),
+          'Thinking',
+        );
       } catch (err) {
         logError(`Generation failed: ${(err as Error).message}`);
         return;
@@ -115,6 +119,9 @@ export class Session {
       case '/provider':
         await this.switchProvider();
         return true;
+      case '/think':
+        await this.toggleThink();
+        return true;
       case '/help':
         logInfo(SLASH_HELP);
         return true;
@@ -122,6 +129,13 @@ export class Session {
         logWarn(`Unknown command: ${cmd}. Try /help.`);
         return true;
     }
+  }
+
+  private async toggleThink(): Promise<void> {
+    const think = !this.config.behavior.think;
+    this.config = { ...this.config, behavior: { ...this.config.behavior, think } };
+    await saveConfig(this.config);
+    logInfo(`Model reasoning ${think ? 'enabled' : 'disabled'}.`);
   }
 
   private async switchModel(): Promise<void> {

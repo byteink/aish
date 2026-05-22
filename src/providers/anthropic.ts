@@ -3,6 +3,9 @@ import { readSSE } from './sse.ts';
 
 const ANTHROPIC_VERSION = '2023-06-01';
 const MAX_TOKENS = 1024;
+const THINKING_BUDGET = 1024;
+// max_tokens must exceed the thinking budget when extended thinking is on.
+const THINKING_MAX_TOKENS = MAX_TOKENS + THINKING_BUDGET;
 
 interface AnthropicDelta {
   type?: string;
@@ -35,7 +38,8 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  async *chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
+  /** Build the Messages API request body, hoisting system turns and thinking. */
+  private buildBody(messages: Message[], opts: ChatOptions | undefined): Record<string, unknown> {
     const system = messages
       .filter((m) => m.role === 'system')
       .map((m) => m.content)
@@ -44,19 +48,29 @@ export class AnthropicProvider implements Provider {
       .filter((m) => m.role !== 'system')
       .map((m) => ({ role: m.role, content: m.content }));
 
-    const body = {
+    // Extended thinking requires max_tokens > budget and forbids a custom
+    // temperature; the thinking stream is dropped (we only yield text deltas).
+    const thinking = opts?.think === true;
+    const tuning: Record<string, unknown> = thinking
+      ? { thinking: { type: 'enabled', budget_tokens: THINKING_BUDGET } }
+      : {};
+    if (!thinking && opts?.temperature !== undefined) tuning.temperature = opts.temperature;
+
+    return {
       model: this.model,
-      max_tokens: MAX_TOKENS,
+      max_tokens: thinking ? THINKING_MAX_TOKENS : MAX_TOKENS,
       stream: true,
       ...(system ? { system } : {}),
       messages: turns,
-      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...tuning,
     };
+  }
 
+  async *chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
     const fetchInit: RequestInit = {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(this.buildBody(messages, opts)),
     };
     if (opts?.signal) fetchInit.signal = opts.signal;
 

@@ -19,6 +19,11 @@ export interface ChatOptions {
   /** Abort in-flight generation (Esc / cancel). */
   signal?: AbortSignal;
   temperature?: number;
+  /**
+   * Ask a reasoning-capable model to think (true) or skip reasoning (false).
+   * Best-effort and provider/model dependent; ignored where unsupported.
+   */
+  think?: boolean;
 }
 
 export type ProviderKind = 'ollama' | 'lmstudio' | 'openai' | 'anthropic';

@@ -1,5 +1,5 @@
 import type { ChatOptions, Message, Provider, ProviderConfig } from './index.ts';
-import { listOpenAICompatModels, streamOpenAICompat } from './openai-compat.ts';
+import { listOpenAICompatModels, reasoningBody, streamOpenAICompat } from './openai-compat.ts';
 
 /**
  * Ollama via its OpenAI-compatible endpoint (default http://localhost:11434/v1).
@@ -19,7 +19,14 @@ export class OllamaProvider implements Provider {
   }
 
   chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
-    return streamOpenAICompat(this.baseUrl, this.model, messages, this.apiKey, opts);
+    return streamOpenAICompat(
+      this.baseUrl,
+      this.model,
+      messages,
+      this.apiKey,
+      opts,
+      reasoningBody(opts?.think),
+    );
   }
 
   listModels(): Promise<string[]> {
