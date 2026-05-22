@@ -44,6 +44,26 @@ describe('parseReply', () => {
     expect(r.type).toBe('chat');
   });
 
+  test('takes the first object when the model emits several plus prose', () => {
+    const messy = [
+      'ls -l | sort -nrh | head -n 10',
+      '{"command": "ls -l | sort -nrh | head -n 10", "explanation": "list by size"}',
+      '',
+      'I am a chat assistant. Here is more rambling.',
+      '{"command": "gh pr list", "explanation": "list PRs"}',
+    ].join('\n');
+    const r = parseReply(messy, 'oneshot');
+    expect(r.type).toBe('command');
+    if (r.type === 'command') expect(r.command).toBe('ls -l | sort -nrh | head -n 10');
+  });
+
+  test('handles braces inside a command string', () => {
+    const raw = '{"command":"awk \'{print $1}\' file","explanation":"first column"}';
+    const r = parseReply(raw, 'oneshot');
+    if (r.type === 'command') expect(r.command).toBe("awk '{print $1}' file");
+    else throw new Error('expected command');
+  });
+
   test('defaults explanation when missing', () => {
     const r = parseReply('{"command":"whoami"}', 'oneshot');
     if (r.type === 'command') expect(r.explanation).toBe('No explanation provided.');

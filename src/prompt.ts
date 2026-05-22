@@ -61,9 +61,12 @@ export function buildInteractivePrompt(ctx: ShellContext): string {
  * or a chat message (interactive) when it is not valid JSON.
  */
 export function parseReply(raw: string, mode: 'oneshot' | 'interactive'): ModelReply {
-  const json = extractJson(raw);
-  const fromJson = json ? interpretJson(json) : null;
-  if (fromJson) return fromJson;
+  // Weak models often emit a valid object surrounded by prose, or several
+  // objects. Take the first balanced object that yields a command or message.
+  for (const obj of extractJsonObjects(stripFences(raw))) {
+    const reply = interpretJson(obj);
+    if (reply) return reply;
+  }
 
   // Fallback: the model did not return the JSON contract. In interactive mode
   // we just show the prose. In one-shot mode we only accept it as a command
@@ -105,16 +108,50 @@ interface RawJson {
   message?: unknown;
 }
 
-function extractJson(raw: string): RawJson | null {
-  const text = stripFences(raw);
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1)) as RawJson;
-  } catch {
-    return null;
+/**
+ * Extract every top-level balanced `{...}` object from the text, in order,
+ * returning those that parse as JSON. Brace matching ignores braces inside
+ * strings, so commands containing `{}` do not confuse it. Bounded by the
+ * length of the input.
+ */
+function extractJsonObjects(text: string): RawJson[] {
+  const objects: RawJson[] = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '{') {
+      i++;
+      continue;
+    }
+    const end = matchBrace(text, i);
+    if (end === -1) break; // no closing brace from here on
+    try {
+      objects.push(JSON.parse(text.slice(i, end + 1)) as RawJson);
+    } catch {
+      // Not valid JSON (e.g. a `{}` inside prose); skip past it.
+    }
+    i = end + 1;
   }
+  return objects;
+}
+
+/** Index of the `}` closing the `{` at `start`, or -1 if unbalanced. */
+function matchBrace(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return -1;
 }
 
 function stripFences(raw: string): string {
