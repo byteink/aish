@@ -17,7 +17,7 @@ import {
   logWarn,
   note,
   paintLines,
-  selectAction,
+  selectOption,
   textPrompt,
   wrap,
 } from './ui.ts';
@@ -56,18 +56,23 @@ export async function presentSuggestion(
 
   // Menu loop: Copy returns here; Run/Revise/Cancel exit the loop.
   for (;;) {
-    const action = await selectAction();
+    const choice = await selectOption('What next?', [
+      { value: 'run', label: 'Run', hint: 'execute in your shell' },
+      { value: 'revise', label: 'Revise', hint: 'ask for a different command' },
+      { value: 'copy', label: 'Copy', hint: 'copy to clipboard' },
+      { value: 'cancel', label: 'Cancel' },
+    ]);
 
-    if (action === 'cancel') return { kind: 'done' };
+    if (isCancel(choice) || choice === 'cancel') return { kind: 'done' };
 
-    if (action === 'copy') {
+    if (choice === 'copy') {
       const ok = await copyToClipboard(suggestion.command);
       if (ok) logInfo('Copied to clipboard.');
       else logWarn('No clipboard tool found; copy the command above manually.');
       continue;
     }
 
-    if (action === 'revise') {
+    if (choice === 'revise') {
       const feedback = await textPrompt('What should change?', {
         placeholder: 'e.g. use ripgrep instead',
       });
@@ -75,7 +80,7 @@ export async function presentSuggestion(
       return { kind: 'revise', feedback: feedback.trim() };
     }
 
-    // action === 'run'
+    // choice === 'run'
     if (safety.dangerous) {
       const confirmed = await confirmPrompt(
         `${color.red('This command is flagged as destructive. Run it anyway?')}`,
