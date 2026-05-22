@@ -4,7 +4,7 @@
  */
 import { detectShell } from './context.ts';
 import { runInShell } from './runtime.ts';
-import { color, logError, logSuccess } from './ui.ts';
+import { color, logError } from './ui.ts';
 
 export async function runCommand(command: string): Promise<number> {
   const shell = detectShell();
@@ -13,7 +13,8 @@ export async function runCommand(command: string): Promise<number> {
 
   const code = await runInShell(command, shell);
 
-  if (code === 0) logSuccess('Command finished.');
-  else logError(`Command exited with code ${code}.`);
+  // Stay quiet on success; the command's own output is the result. Only flag a
+  // non-zero exit, which the user might otherwise miss.
+  if (code !== 0) logError(`Command exited with code ${code}.`);
   return code;
 }

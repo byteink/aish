@@ -43,20 +43,41 @@ export async function ensureDir(path: string, mode = 0o700): Promise<void> {
   await mkdir(path, { recursive: true, mode });
 }
 
+// The command is passed to the shell through this env var (not on argv), so we
+// never have to quote it and the shell still interprets it exactly as typed.
+const COMMAND_ENV = 'AISH_COMMAND';
+
 /**
- * Build the argv for running `command` in `shell`. We use an INTERACTIVE shell
- * (`-i`) for bash/zsh/fish so the user's rc file is sourced: aliases, shell
- * functions, and PATH entries defined in ~/.zshrc / ~/.bashrc all apply, which
- * is exactly what the user gets when typing the command themselves. A plain
- * `-c` shell skips the rc file and would miss those (e.g. an aliased CLI).
- * POSIX sh has no useful interactive rc, so it stays a plain `-c`.
+ * Build the argv + env for running `command` in `shell`.
+ *
+ * We run a NON-interactive shell (no `-i`): an interactive shell turns on job
+ * control, grabs the terminal's foreground process group, and leaves our own
+ * process to be stopped with SIGTTOU ("suspended (tty output)") on its next
+ * write. Non-interactive shells do no job control, so that cannot happen.
+ *
+ * To still pick up the user's aliases and PATH, we source their rc file and
+ * then `eval` the command: sourcing first means the alias is defined before the
+ * command is parsed (zsh expands aliases by default; bash needs
+ * `expand_aliases`). rc output is silenced so its noise never mixes into the
+ * command's output.
  */
-function shellInvocation(shell: string, command: string): string[] {
-  const name = shell.slice(shell.lastIndexOf('/') + 1);
-  if (name === 'zsh' || name === 'bash' || name === 'fish') {
-    return ['-i', '-c', command];
+function shellInvocation(shellName: string): string[] {
+  if (shellName === 'zsh') {
+    const rc = 'rc="${ZDOTDIR:-$HOME}/.zshrc"; [ -r "$rc" ] && source "$rc" >/dev/null 2>&1';
+    return ['-c', `${rc}; eval "$${COMMAND_ENV}"`];
   }
-  return ['-c', command];
+  if (shellName === 'bash') {
+    const rc =
+      'shopt -s expand_aliases; [ -r "$HOME/.bashrc" ] && source "$HOME/.bashrc" >/dev/null 2>&1';
+    return ['-c', `${rc}; eval "$${COMMAND_ENV}"`];
+  }
+  if (shellName === 'fish') {
+    // fish sources config.fish for every shell, so aliases (functions) are
+    // already available; eval the command string from the env var.
+    return ['-c', `eval $${COMMAND_ENV}`];
+  }
+  // POSIX sh and unknown shells: no user rc/aliases, but still eval the command.
+  return ['-c', `eval "$${COMMAND_ENV}"`];
 }
 
 /**
@@ -64,9 +85,13 @@ function shellInvocation(shell: string, command: string): string[] {
  * terminal by inheriting the parent's stdio. Resolves with the exit code.
  */
 export function runInShell(command: string, shell: string): Promise<number> {
+  const shellName = shell.slice(shell.lastIndexOf('/') + 1);
+  const args = shellInvocation(shellName);
   return new Promise((resolve, reject) => {
-    // The command string is passed verbatim; the shell performs its own parsing.
-    const child = nodeSpawn(shell, shellInvocation(shell, command), { stdio: 'inherit' });
+    const child = nodeSpawn(shell, args, {
+      stdio: 'inherit',
+      env: { ...process.env, [COMMAND_ENV]: command },
+    });
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 0));
   });

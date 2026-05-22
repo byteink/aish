@@ -106,6 +106,52 @@ export async function selectOption<T extends string>(
   return p.select<T>({ message, options: options as Option<T>[] });
 }
 
+export type CommandAction = 'run' | 'revise' | 'copy' | 'cancel';
+
+/**
+ * Compact, single-row action prompt for a suggested command. Reads one
+ * keypress rather than a multi-line vertical menu. Returns 'cancel' when not
+ * attached to a TTY (e.g. piped input), where no interactive choice is possible.
+ */
+export async function selectAction(): Promise<CommandAction> {
+  if (!process.stdin.isTTY) return 'cancel';
+
+  const bar = color.dim('│');
+  const opt = (key: string, label: string): string => `${color.bold(key)} ${color.dim(label)}`;
+  process.stdout.write(
+    `${bar}  ${opt('⏎', 'run')}   ${opt('e', 'revise')}   ${opt('c', 'copy')}   ${opt('esc', 'cancel')} `,
+  );
+
+  const key = await readKey();
+  process.stdout.write('\n');
+  return mapActionKey(key);
+}
+
+function mapActionKey(key: string): CommandAction {
+  if (key === '\x03') cancelled(); // Ctrl-C
+  if (key === '\r' || key === '\n' || key === 'r' || key === 'R') return 'run';
+  if (key === 'e' || key === 'E') return 'revise';
+  if (key === 'c' || key === 'C') return 'copy';
+  return 'cancel'; // Esc, q, x, or anything else
+}
+
+/** Read a single keypress in raw mode, restoring the prior mode afterward. */
+function readKey(): Promise<string> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    stdin.setRawMode?.(true);
+    stdin.resume();
+    const onData = (buf: Buffer): void => {
+      stdin.off('data', onData);
+      stdin.pause();
+      stdin.setRawMode?.(wasRaw);
+      resolve(buf.toString('utf8'));
+    };
+    stdin.once('data', onData);
+  });
+}
+
 export interface TextOpts {
   placeholder?: string;
   /** Pre-filled, editable value. */
