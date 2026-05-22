@@ -68,7 +68,9 @@ export async function presentSuggestion(
     }
 
     if (choice === 'revise') {
-      const feedback = await textPrompt('What should change?', 'e.g. use ripgrep instead');
+      const feedback = await textPrompt('What should change?', {
+        placeholder: 'e.g. use ripgrep instead',
+      });
       if (isCancel(feedback)) return { kind: 'done' };
       return { kind: 'revise', feedback: feedback.trim() };
     }

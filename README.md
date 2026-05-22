@@ -37,9 +37,19 @@ brew install byteink/tap/aish
 
 ### One-shot
 
+No quotes needed for ordinary requests:
+
 ```sh
-ai <natural language request>
-ai "compress the logs folder into logs.tar.gz"
+ai list all files over 100mb
+ai compress the logs folder into logs.tar.gz
+```
+
+Quote the request only if it contains characters your shell treats specially
+(`?`, `*`, `>`, `|`, `&`, `$`, quotes, parentheses), otherwise the shell will
+interpret them before aish sees them:
+
+```sh
+ai "what's using port 8080?"
 ```
 
 You get the suggested command plus a one-line explanation, then a prompt:
@@ -67,18 +77,30 @@ Slash commands:
 
 ## Providers
 
-On first run, `aish` detects a running local provider and walks you through
-picking a model.
+On first run, `aish` detects a running local provider on localhost and walks you
+through choosing the endpoint, an optional API key, and a model. If nothing is
+configured yet, running `ai <request>` starts this setup automatically.
 
-| Provider | Default endpoint | Notes |
+| Provider | Default endpoint | Auth |
 |---|---|---|
-| Ollama | `http://localhost:11434/v1` | local, no key |
-| LM Studio | `http://localhost:1234/v1` | local, no key |
-| OpenAI | `https://api.openai.com/v1` | needs API key |
-| Anthropic | `https://api.anthropic.com/v1` | needs API key |
+| Ollama | `http://localhost:11434/v1` | optional API key |
+| LM Studio | `http://localhost:1234/v1` | optional API key |
+| OpenAI | `https://api.openai.com/v1` | API key required |
+| Anthropic | `https://api.anthropic.com/v1` | API key required |
 
-All four implement a common streaming `chat()` interface, so adding a provider
-is a single small file.
+**Local providers are not limited to localhost.** Ollama and LM Studio can run
+on another machine, a LAN address, a reverse proxy, or a tunnel. During setup
+(or via `ai config set baseUrl <url>`) point aish at any URL, and supply an
+optional API key if that endpoint sits behind auth:
+
+```sh
+ai config set provider ollama
+ai config set baseUrl https://ollama.box.lan/v1
+ai config set apiKey   my-gateway-token       # only if the endpoint needs it
+```
+
+All four providers implement a common streaming `chat()` interface, so adding a
+provider is a single small file.
 
 ## Configuration
 

@@ -48,9 +48,20 @@ export async function selectOption<T extends string>(
   return p.select<T>({ message, options: options as Option<T>[] });
 }
 
-export async function textPrompt(message: string, placeholder?: string): Promise<string | symbol> {
-  return p.text(placeholder ? { message, placeholder } : { message });
+export interface TextOpts {
+  placeholder?: string;
+  /** Pre-filled, editable value. */
+  initialValue?: string;
+  /** Value used when the field is submitted empty. */
+  defaultValue?: string;
 }
+
+export async function textPrompt(message: string, opts: TextOpts = {}): Promise<string | symbol> {
+  return p.text({ message, ...opts });
+}
+
+/** A clack spinner instance (start/stop). */
+export const spinner = (): ReturnType<typeof p.spinner> => p.spinner();
 
 export async function passwordPrompt(message: string): Promise<string | symbol> {
   return p.password({ message });
