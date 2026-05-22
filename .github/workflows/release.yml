@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub Release and upload assets
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    name: Publish npm + binaries + formula
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      # registry-url wires NODE_AUTH_TOKEN into .npmrc for npm publish.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build dist (npm artifact)
+        run: bun run build
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+      - name: Resolve version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify package.json matches tag
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          tag="${{ steps.version.outputs.version }}"
+          if [ "$pkg" != "$tag" ]; then
+            echo "package.json version ($pkg) does not match tag ($tag)"; exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build standalone binaries
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          build() { # $1 bun-target  $2 os  $3 arch
+            bun build --compile --minify --sourcemap=none --target="$1" src/cli.ts --outfile out/ai
+            tar -czf "out/aish_$2_$3.tar.gz" -C out ai
+            rm out/ai
+          }
+          build bun-darwin-arm64 Darwin arm64
+          build bun-darwin-x64   Darwin x86_64
+          build bun-linux-x64    Linux  x86_64
+
+      - name: Compute checksums
+        id: sha
+        run: |
+          set -euo pipefail
+          cd out
+          shasum -a 256 *.tar.gz > checksums.txt
+          cat checksums.txt
+          get() { awk -v f="$1" '$2==f {print $1}' checksums.txt; }
+          {
+            echo "darwin_arm64=$(get aish_Darwin_arm64.tar.gz)"
+            echo "darwin_x86_64=$(get aish_Darwin_x86_64.tar.gz)"
+            echo "linux_x86_64=$(get aish_Linux_x86_64.tar.gz)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/aish_Darwin_arm64.tar.gz
+            out/aish_Darwin_x86_64.tar.gz
+            out/aish_Linux_x86_64.tar.gz
+            out/checksums.txt
+
+      - name: Render Homebrew formula
+        env:
+          SHA_DARWIN_ARM64: ${{ steps.sha.outputs.darwin_arm64 }}
+          SHA_DARWIN_X86_64: ${{ steps.sha.outputs.darwin_x86_64 }}
+          SHA_LINUX_X86_64: ${{ steps.sha.outputs.linux_x86_64 }}
+        run: bun run scripts/render-formula.ts "${{ steps.version.outputs.version }}" rendered-aish.rb
+
+      - name: Push formula to byteink/homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/byteink/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp rendered-aish.rb tap/Formula/aish.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/aish.rb
+          if git diff --cached --quiet; then
+            echo "formula unchanged; nothing to push"
+          else
+            git commit -m "aish ${{ steps.version.outputs.version }}"
+            git push
+          fi

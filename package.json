@@ -1,0 +1,61 @@
+{
+  "name": "@byteink/aish",
+  "version": "0.1.0",
+  "description": "AI shell assistant — turn natural language into shell commands. Local-first (Ollama, LM Studio), with OpenAI and Anthropic support.",
+  "keywords": [
+    "ai",
+    "shell",
+    "cli",
+    "llm",
+    "ollama",
+    "lmstudio",
+    "openai",
+    "anthropic",
+    "natural-language",
+    "command-line",
+    "assistant",
+    "typescript"
+  ],
+  "homepage": "https://github.com/byteink/aish#readme",
+  "bugs": "https://github.com/byteink/aish/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/byteink/aish.git"
+  },
+  "license": "MIT",
+  "author": "ByteInk",
+  "type": "module",
+  "bin": {
+    "ai": "./dist/cli.mjs"
+  },
+  "exports": "./dist/cli.mjs",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun run scripts/build.ts",
+    "build:binary": "bun run scripts/build-binary.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src scripts",
+    "format": "biome format --write src scripts",
+    "test": "bun test",
+    "prepublishOnly": "bun run build && bun run typecheck && bun run lint"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@clack/prompts": "^0.10.0",
+    "@types/bun": "^1.1.14",
+    "@types/node": "^22.10.0",
+    "citty": "^0.1.6",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+
+# Compiled standalone binaries (Homebrew artifacts, built in CI)
+/aish
+/aish-*
+/bin/aish*
+
+# npm auth — never commit a token
+.npmrc
+
+# OS
+.DS_Store
