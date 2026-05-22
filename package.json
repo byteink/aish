@@ -1,7 +1,7 @@
 {
   "name": "@byteink/aish",
   "version": "0.1.0",
-  "description": "AI shell assistant — turn natural language into shell commands. Local-first (Ollama, LM Studio), with OpenAI and Anthropic support.",
+  "description": "AI shell assistant that turns natural language into shell commands. Local-first (Ollama, LM Studio), with OpenAI and Anthropic support.",
   "keywords": [
     "ai",
     "shell",

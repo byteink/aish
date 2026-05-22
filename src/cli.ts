@@ -5,7 +5,7 @@
  * Plus `ai config` subcommands.
  *
  * citty treats the first positional of a command with subCommands as a
- * subcommand name and errors on anything unknown — which would clash with our
+ * subcommand name and errors on anything unknown, which would clash with our
  * free-text request. So we dispatch on the first token ourselves: `config`
  * runs the config command tree; everything else runs the query command (which
  * has no subCommands, so free text passes through untouched).
@@ -118,7 +118,7 @@ const queryCmd = defineCommand({
     name: 'ai',
     version: pkg.version,
     description:
-      'AI shell assistant — turn natural language into shell commands.\n' +
+      'AI shell assistant that turns natural language into shell commands.\n' +
       'Run `ai` with no arguments for an interactive session, or `ai config` to manage settings.',
   },
   args: {

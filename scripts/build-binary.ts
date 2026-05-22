@@ -1,7 +1,7 @@
 /**
  * Builds the standalone, self-contained `ai` binary via `bun build --compile`.
  *
- * This is the Homebrew / GitHub Release artifact — platform-specific, no Node or
+ * This is the Homebrew / GitHub Release artifact: platform-specific, no Node or
  * Bun required at runtime. It is NOT the npm artifact (see scripts/build.ts).
  *
  * Usage: bun run scripts/build-binary.ts [bun-target] [outfile]

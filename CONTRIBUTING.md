@@ -36,7 +36,7 @@ a broken build can never reach npm.
 
 ## Releasing
 
-Maintainers only. Tag-driven — see the "Maintainer: releasing" section of the
+Maintainers only. Tag-driven; see the "Maintainer: releasing" section of the
 [README](README.md). Required secrets: `NPM_TOKEN`, `HOMEBREW_TAP_GITHUB_TOKEN`.
 
 ```sh

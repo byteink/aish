@@ -3,9 +3,9 @@
 # This file is the source of truth. The release workflow renders it (filling in
 # the version and per-platform SHA256s) and pushes the result to
 # byteink/homebrew-tap as Formula/aish.rb. The placeholders below are replaced
-# by scripts/render-formula.ts — do not hand-edit them.
+# by scripts/render-formula.ts; do not hand-edit them.
 class Aish < Formula
-  desc "AI shell assistant — turn natural language into shell commands"
+  desc "AI shell assistant that turns natural language into shell commands"
   homepage "https://github.com/byteink/aish"
   version "__VERSION__"
   license "Elastic-2.0"

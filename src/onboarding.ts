@@ -57,7 +57,7 @@ async function probe(baseUrl: string): Promise<string[] | null> {
 
 /** Interactive first-run setup. Saves and returns the new config. */
 export async function runOnboarding(): Promise<Config> {
-  intro(color.cyan('Welcome to aish — let us get you set up.'));
+  intro(color.cyan('Welcome to aish. Let us get you set up.'));
 
   const detected = await collectDetected();
   const kind = await chooseProvider(detected);
@@ -69,7 +69,7 @@ export async function runOnboarding(): Promise<Config> {
 
   await saveConfig(config);
   logSuccess(
-    `Saved config to ~/.aish/config.json — using ${PROVIDER_LABELS[kind]} (${config.model}).`,
+    `Saved config to ~/.aish/config.json, using ${PROVIDER_LABELS[kind]} (${config.model}).`,
   );
   return config;
 }

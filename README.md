@@ -1,6 +1,6 @@
 # aish
 
-> AI shell assistant — turn natural language into shell commands.
+> AI shell assistant that turns natural language into shell commands.
 
 `aish` installs an `ai` command that converts plain English into a shell command
 idiomatic to your OS and shell, shows you what it will run, and lets you run,
@@ -44,10 +44,10 @@ ai "compress the logs folder into logs.tar.gz"
 
 You get the suggested command plus a one-line explanation, then a prompt:
 
-- **Run** — execute it in your shell, output streamed live
-- **Revise** — give feedback and get a new command
-- **Copy** — copy to clipboard
-- **Cancel** — do nothing
+- **Run**: execute it in your shell, output streamed live
+- **Revise**: give feedback and get a new command
+- **Copy**: copy to clipboard
+- **Cancel**: do nothing
 
 ### Interactive
 
@@ -104,8 +104,8 @@ Keys: `provider`, `baseUrl`, `model`, `apiKey`, and `behavior.*`:
 
 ### Context awareness
 
-The model is given your OS, shell, and current directory. Optionally — and only
-when enabled — a snippet of recent shell history and `git status`. Toggle these
+The model is given your OS, shell, and current directory. Optionally, and only
+when enabled, a snippet of recent shell history and `git status`. Toggle these
 with the `behavior.includeHistory` / `behavior.includeGit` flags for privacy.
 
 ## Safety
@@ -113,7 +113,7 @@ with the `behavior.includeHistory` / `behavior.includeGit` flags for privacy.
 Before running, every command is scanned for destructive patterns (`rm -rf`,
 `dd`, `mkfs`, fork bombs, `chmod -R 777`, `curl … | sh`, force-push, and more).
 A flagged command is clearly warned and **always requires an extra
-confirmation** — it is never auto-run, even with `autoConfirmSafe` enabled.
+confirmation**; it is never auto-run, even with `autoConfirmSafe` enabled.
 
 This is a heuristic guard, not a sandbox. Read what you run.
 
@@ -156,9 +156,9 @@ git push --follow-tags
 
 Required GitHub Actions secrets:
 
-- `NPM_TOKEN` — granular/automation npm token with publish rights for the
+- `NPM_TOKEN`: granular/automation npm token with publish rights for the
   `@byteink` scope. Never commit it; never commit an `.npmrc` containing a token.
-- `HOMEBREW_TAP_GITHUB_TOKEN` — token with push access to `byteink/homebrew-tap`.
+- `HOMEBREW_TAP_GITHUB_TOKEN`: token with push access to `byteink/homebrew-tap`.
 
 The `prepublishOnly` script rebuilds `dist` and runs typecheck + lint, so a
 broken build can never be published.
@@ -167,6 +167,6 @@ broken build can never be published.
 
 [Elastic License 2.0](LICENSE) © ByteInk.
 
-Free to use, modify, and redistribute — including commercially and inside a
+Free to use, modify, and redistribute, including commercially and inside a
 business. The one thing you may not do is offer aish to third parties as a
 hosted or managed service, or strip its license/copyright notices.

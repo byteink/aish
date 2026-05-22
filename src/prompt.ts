@@ -47,7 +47,7 @@ export function buildInteractivePrompt(ctx: ShellContext): string {
     '2. A conversational answer otherwise:',
     '   {"type": "chat", "message": "<your reply>"}',
     '',
-    'Respond with ONLY the JSON object — no markdown, no code fences, no extra text.',
+    'Respond with ONLY the JSON object: no markdown, no code fences, no extra text.',
     'Commands must be idiomatic to the stated OS and shell and contain exactly one command.',
     '',
     'Environment:',
@@ -67,7 +67,7 @@ export function parseReply(raw: string, mode: 'oneshot' | 'interactive'): ModelR
 
   // Fallback: the model did not return the JSON contract. In interactive mode
   // we just show the prose. In one-shot mode we only accept it as a command
-  // when it is a single short line — otherwise it is almost certainly rambling
+  // when it is a single short line; otherwise it is almost certainly rambling
   // prose, and treating that as an executable command (and possibly auto-
   // running it) would be unsafe, so we surface it as a message instead.
   const text = stripFences(raw).trim();

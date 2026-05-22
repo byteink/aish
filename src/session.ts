@@ -48,7 +48,7 @@ export class Session {
 
   /** Run the REPL until the user exits or aborts. */
   async run(): Promise<void> {
-    intro(color.cyan('aish — interactive session'));
+    intro(color.cyan('aish interactive session'));
     logInfo(
       `${PROVIDER_LABELS[this.config.provider]} · ${this.config.model}\n` +
         `${color.dim('Type a request, or /help for commands.')}`,

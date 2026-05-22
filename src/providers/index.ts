@@ -1,7 +1,7 @@
 /**
  * Provider abstraction. Every provider implements `chat()` (streaming) and
  * `listModels()`. Adding a provider means implementing this interface and
- * wiring it into `createProvider` — nothing else in the app knows the vendor.
+ * wiring it into `createProvider`; nothing else in the app knows the vendor.
  */
 import { AnthropicProvider } from './anthropic.ts';
 import { LMStudioProvider } from './lmstudio.ts';

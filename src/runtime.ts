@@ -2,7 +2,7 @@
  * Runtime shim: prefer Bun-native APIs when running under Bun, fall back to
  * Node built-ins otherwise. The published dist/cli.mjs runs under plain Node,
  * so every Bun-only call must have a deterministic Node equivalent here. This
- * is the single place that branches on the runtime — nothing else should.
+ * is the single place that branches on the runtime; nothing else should.
  */
 import { spawn as nodeSpawn } from 'node:child_process';
 import { mkdir, chmod as nodeChmod, readFile, writeFile } from 'node:fs/promises';
