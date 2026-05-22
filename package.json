@@ -22,7 +22,7 @@
     "type": "git",
     "url": "git+https://github.com/byteink/aish.git"
   },
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "author": "ByteInk",
   "type": "module",
   "bin": {

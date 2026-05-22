@@ -165,4 +165,8 @@ broken build can never be published.
 
 ## License
 
-MIT © ByteInk
+[Elastic License 2.0](LICENSE) © ByteInk.
+
+Free to use, modify, and redistribute — including commercially and inside a
+business. The one thing you may not do is offer aish to third parties as a
+hosted or managed service, or strip its license/copyright notices.

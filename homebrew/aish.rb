@@ -8,7 +8,7 @@ class Aish < Formula
   desc "AI shell assistant — turn natural language into shell commands"
   homepage "https://github.com/byteink/aish"
   version "__VERSION__"
-  license "MIT"
+  license "Elastic-2.0"
 
   on_macos do
     on_arm do
