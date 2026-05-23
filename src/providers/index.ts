@@ -64,21 +64,16 @@ export function isRemote(kind: ProviderKind): boolean {
   return kind === 'openai' || kind === 'anthropic';
 }
 
+// Registry of provider constructors. Adding a vendor means adding its class and
+// one entry here; the exhaustive Record guarantees every kind stays mapped.
+const PROVIDERS: Record<ProviderKind, new (config: ProviderConfig) => Provider> = {
+  ollama: OllamaProvider,
+  lmstudio: LMStudioProvider,
+  openai: OpenAIProvider,
+  anthropic: AnthropicProvider,
+};
+
 /** Build a concrete provider from config. The single dispatch point. */
 export function createProvider(config: ProviderConfig): Provider {
-  switch (config.kind) {
-    case 'ollama':
-      return new OllamaProvider(config);
-    case 'lmstudio':
-      return new LMStudioProvider(config);
-    case 'openai':
-      return new OpenAIProvider(config);
-    case 'anthropic':
-      return new AnthropicProvider(config);
-    default: {
-      // Exhaustiveness guard: a new ProviderKind must be handled here.
-      const unreachable: never = config.kind;
-      throw new Error(`unknown provider: ${String(unreachable)}`);
-    }
-  }
+  return new PROVIDERS[config.kind](config);
 }

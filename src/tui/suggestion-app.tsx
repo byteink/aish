@@ -1,12 +1,12 @@
 /**
- * The command-suggestion frame, shared by one-shot and interactive modes. The
- * whole interaction — thinking, the suggestion, the action row, the revise
- * loop, and the destructive-command confirm — lives in a single in-place frame
- * that erases itself on exit, leaving only the chosen result in the scrollback.
- * Generation and the revise loop run inside the component; the host runs the
- * chosen command after the frame closes and releases the terminal.
+ * The command-suggestion frame, shared by one-shot and interactive modes. This
+ * container owns the flow — streaming generation, the revise loop, action
+ * dispatch and the destructive-command gate — and delegates all rendering to
+ * the pure views in ./suggestion-views.tsx. The whole interaction lives in a
+ * single in-place frame that erases itself on exit (see ./render.ts), leaving
+ * only the chosen result; the host runs the chosen command afterwards.
  */
-import { Box, Text, render, useApp, useInput } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BehaviorConfig } from '../config.ts';
 import type { CommandSuggestion } from '../prompt.ts';
@@ -14,11 +14,17 @@ import { parseReply } from '../prompt.ts';
 import type { Message, Provider } from '../providers/index.ts';
 import { copyToClipboard } from '../runtime.ts';
 import { scanCommand } from '../safety.ts';
-import { Spinner, TextInput } from './components.tsx';
+import { TextInput } from './components.tsx';
+import { runFrame } from './render.ts';
+import {
+  ACTIONS,
+  type Action,
+  ConfirmView,
+  SuggestView,
+  ThinkingView,
+} from './suggestion-views.tsx';
 
 const MAX_REVISIONS = 20;
-const ACTIONS = ['Run', 'Revise', 'Copy', 'Cancel'] as const;
-type Action = (typeof ACTIONS)[number];
 type Mode = 'oneshot' | 'interactive';
 
 /** What the host should do once the frame closes. */
@@ -35,11 +41,10 @@ interface AppProps {
   behavior: BehaviorConfig;
   messages: Message[];
   mode: Mode;
-  onDone: (outcome: TuiOutcome) => void;
+  resolve: (outcome: TuiOutcome) => void;
 }
 
-function App({ provider, behavior, messages, mode, onDone }: Readonly<AppProps>) {
-  const { exit } = useApp();
+function App({ provider, behavior, messages, mode, resolve }: Readonly<AppProps>) {
   const alive = useRef(true);
   const revisions = useRef(0);
   const [phase, setPhase] = useState<Phase>('thinking');
@@ -49,14 +54,14 @@ function App({ provider, behavior, messages, mode, onDone }: Readonly<AppProps>)
   const [revText, setRevText] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Resolve once; runFrame handles unmount and clearing the frame.
   const finish = useCallback(
     (outcome: TuiOutcome) => {
       if (!alive.current) return;
       alive.current = false;
-      onDone(outcome);
-      exit();
+      resolve(outcome);
     },
-    [onDone, exit],
+    [resolve],
   );
 
   const generate = useCallback(async () => {
@@ -150,14 +155,7 @@ function App({ provider, behavior, messages, mode, onDone }: Readonly<AppProps>)
     [messages, generate, finish],
   );
 
-  if (phase === 'thinking') {
-    return (
-      <Box>
-        <Spinner />
-        <Text> Thinking…</Text>
-      </Box>
-    );
-  }
+  if (phase === 'thinking') return <ThinkingView />;
 
   if (phase === 'revise') {
     return (
@@ -175,47 +173,21 @@ function App({ provider, behavior, messages, mode, onDone }: Readonly<AppProps>)
   }
 
   if (!suggestion) return <Text> </Text>;
+  if (phase === 'confirm') return <ConfirmView reasons={reasons} />;
 
-  if (phase === 'confirm') {
-    return (
-      <Box flexDirection="column">
-        <Text color="red">⚠ Potentially destructive: {reasons.join('; ')}.</Text>
-        <Text>
-          Run anyway? <Text dimColor>(y/N)</Text>
-        </Text>
-      </Box>
-    );
-  }
-
-  // suggest
   return (
-    <Box flexDirection="column">
-      <Box>
-        <Text color="cyan">▌ </Text>
-        <Text bold>{suggestion.command}</Text>
-        {behavior.explain && suggestion.explanation ? (
-          <Text dimColor>{`   ${suggestion.explanation}`}</Text>
-        ) : null}
-      </Box>
-      {reasons.length > 0 ? <Text color="red">⚠ {reasons.join('; ')}</Text> : null}
-      <Box>
-        {ACTIONS.map((a, i) => (
-          <Text key={a}>
-            <Text inverse={i === sel} dimColor={i !== sel}>
-              {` ${a} `}
-            </Text>
-            {i < ACTIONS.length - 1 ? <Text dimColor> · </Text> : null}
-          </Text>
-        ))}
-        {copied ? <Text dimColor>{'   copied'}</Text> : null}
-      </Box>
-    </Box>
+    <SuggestView
+      suggestion={suggestion}
+      explain={behavior.explain}
+      reasons={reasons}
+      sel={sel}
+      copied={copied}
+    />
   );
 }
 
 /**
  * Render the suggestion frame and resolve once the user picks an outcome. The
- * live frame is cleared before unmount so it leaves no scrollback trace; the
  * host is responsible for any persistent output (running the command, printing
  * a chat reply, or reporting an error).
  */
@@ -225,22 +197,13 @@ export function runSuggestionTui(params: {
   messages: Message[];
   mode: Mode;
 }): Promise<TuiOutcome> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const onDone = (outcome: TuiOutcome): void => {
-      if (settled) return;
-      settled = true;
-      instance.clear();
-      resolve(outcome);
-    };
-    const instance = render(
-      <App
-        provider={params.provider}
-        behavior={params.behavior}
-        messages={params.messages}
-        mode={params.mode}
-        onDone={onDone}
-      />,
-    );
-  });
+  return runFrame<TuiOutcome>((resolve) => (
+    <App
+      provider={params.provider}
+      behavior={params.behavior}
+      messages={params.messages}
+      mode={params.mode}
+      resolve={resolve}
+    />
+  ));
 }

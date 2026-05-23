@@ -3,7 +3,7 @@
  * the same `/chat/completions` and `/models` shapes, so they reuse this; only
  * their default base URL and auth differ.
  */
-import type { ChatOptions, Message } from './index.ts';
+import type { ChatOptions, Message, Provider, ProviderConfig, ProviderKind } from './index.ts';
 import { readSSE } from './sse.ts';
 
 interface StreamDelta {
@@ -68,12 +68,48 @@ export async function* streamOpenAICompat(
 }
 
 /**
- * Map the `think` flag to the `reasoning_effort` field understood by reasoning
- * models. Returns `{}` when `think` is undefined so default behaviour is kept.
+ * Base provider for any OpenAI-compatible endpoint (Ollama, LM Studio, OpenAI
+ * all speak this dialect). Subclasses inherit the streaming chat and model
+ * listing; the one thing that varies per vendor — how the `think` flag maps to
+ * the request body — is a protected hook they override (Template Method). The
+ * named subclasses also give each vendor a home for future native behaviour.
  */
-export function reasoningBody(think: boolean | undefined): Record<string, unknown> {
-  if (think === undefined) return {};
-  return { reasoning_effort: think ? 'high' : 'low' };
+export class OpenAICompatProvider implements Provider {
+  readonly kind: ProviderKind;
+  readonly model: string;
+  protected readonly baseUrl: string;
+  protected readonly apiKey: string | undefined;
+
+  constructor(config: ProviderConfig) {
+    this.kind = config.kind;
+    this.model = config.model;
+    this.baseUrl = config.baseUrl.replace(/\/+$/, '');
+    this.apiKey = config.apiKey;
+  }
+
+  /**
+   * Request fields derived from the `think` flag. Default: graded high/low
+   * effort, omitted entirely when unset so the model's own default stands.
+   * Local servers accept this on any model; override where a vendor differs.
+   */
+  protected reasoningBody(think: boolean | undefined): Record<string, unknown> {
+    return think === undefined ? {} : { reasoning_effort: think ? 'high' : 'low' };
+  }
+
+  chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
+    return streamOpenAICompat(
+      this.baseUrl,
+      this.model,
+      messages,
+      this.apiKey,
+      opts,
+      this.reasoningBody(opts?.think),
+    );
+  }
+
+  listModels(): Promise<string[]> {
+    return listOpenAICompatModels(this.baseUrl, this.apiKey);
+  }
 }
 
 /** List model ids from an OpenAI-compatible `/models` endpoint. */

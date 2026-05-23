@@ -4,7 +4,8 @@
  */
 import { detectShell } from './context.ts';
 import { runInShell } from './runtime.ts';
-import { color, logError } from './ui.ts';
+import { color } from './term.ts';
+import { logError } from './ui.ts';
 
 export async function runCommand(command: string): Promise<number> {
   const shell = detectShell();

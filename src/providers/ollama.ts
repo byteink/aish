@@ -1,35 +1,9 @@
-import type { ChatOptions, Message, Provider, ProviderConfig } from './index.ts';
-import { listOpenAICompatModels, reasoningBody, streamOpenAICompat } from './openai-compat.ts';
+import { OpenAICompatProvider } from './openai-compat.ts';
 
 /**
  * Ollama via its OpenAI-compatible endpoint (default http://localhost:11434/v1).
- * The base URL may point at any host (e.g. a box on the LAN or behind a proxy),
- * and an API key is optional for endpoints sitting behind auth.
+ * The base URL may point at any host (LAN, proxy, tunnel) and an API key is
+ * optional. Behaviour matches the OpenAI-compatible base; this subclass is the
+ * extension point for any Ollama-specific handling added later.
  */
-export class OllamaProvider implements Provider {
-  readonly kind = 'ollama' as const;
-  readonly model: string;
-  private readonly baseUrl: string;
-  private readonly apiKey: string | undefined;
-
-  constructor(config: ProviderConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, '');
-    this.model = config.model;
-    this.apiKey = config.apiKey;
-  }
-
-  chat(messages: Message[], opts?: ChatOptions): AsyncGenerator<string, void, unknown> {
-    return streamOpenAICompat(
-      this.baseUrl,
-      this.model,
-      messages,
-      this.apiKey,
-      opts,
-      reasoningBody(opts?.think),
-    );
-  }
-
-  listModels(): Promise<string[]> {
-    return listOpenAICompatModels(this.baseUrl, this.apiKey);
-  }
-}
+export class OllamaProvider extends OpenAICompatProvider {}

@@ -13,9 +13,9 @@ import {
   type ProviderKind,
   createProvider,
 } from './providers/index.ts';
+import { color } from './term.ts';
 import {
   cancelled,
-  color,
   intro,
   isCancel,
   logInfo,

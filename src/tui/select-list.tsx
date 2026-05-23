@@ -4,33 +4,26 @@
  * frame erases itself on exit; the host prints any resulting confirmation.
  * Resolves to the chosen item, or null when cancelled.
  */
-import { Box, Text, render, useApp, useInput } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';
+import { runFrame } from './render.ts';
 
 function SelectList({
   message,
   items,
-  onPick,
-  onCancel,
+  resolve,
 }: Readonly<{
   message: string;
   items: readonly string[];
-  onPick: (item: string) => void;
-  onCancel: () => void;
+  resolve: (value: string | null) => void;
 }>) {
-  const { exit } = useApp();
   const [sel, setSel] = useState(0);
 
   useInput((_input, key) => {
     if (key.upArrow) setSel((s) => (s + items.length - 1) % items.length);
     else if (key.downArrow) setSel((s) => (s + 1) % items.length);
-    else if (key.return) {
-      onPick(items[sel] as string);
-      exit();
-    } else if (key.escape) {
-      onCancel();
-      exit();
-    }
+    else if (key.return) resolve(items[sel] as string);
+    else if (key.escape) resolve(null);
   });
 
   return (
@@ -46,25 +39,9 @@ function SelectList({
   );
 }
 
-export async function selectList(
-  message: string,
-  items: readonly string[],
-): Promise<string | null> {
-  if (items.length === 0) return null;
-  let result: string | null = null;
-  const instance = render(
-    <SelectList
-      message={message}
-      items={items}
-      onPick={(item) => {
-        result = item;
-      }}
-      onCancel={() => {
-        result = null;
-      }}
-    />,
-  );
-  await instance.waitUntilExit();
-  instance.clear();
-  return result;
+export function selectList(message: string, items: readonly string[]): Promise<string | null> {
+  if (items.length === 0) return Promise.resolve(null);
+  return runFrame<string | null>((resolve) => (
+    <SelectList message={message} items={items} resolve={resolve} />
+  ));
 }

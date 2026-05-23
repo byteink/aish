@@ -102,12 +102,27 @@ export function makeConfig(
   };
 }
 
+const BEHAVIOR_PREFIX = 'behavior.';
+// Every behaviour flag is a boolean, so they share one setter path. Derived
+// from DEFAULT_BEHAVIOR: adding a flag there makes it settable here for free.
+function isBehaviorKey(key: string): key is keyof BehaviorConfig {
+  return Object.hasOwn(DEFAULT_BEHAVIOR, key);
+}
+
 /**
  * Apply a dotted `key=value` setting (e.g. `behavior.explain=false`) to a
  * config, returning the updated copy. Validates keys and coerces booleans.
  */
 export function applySetting(config: Config, key: string, value: string): Config {
   const next: Config = { ...config, behavior: { ...config.behavior } };
+
+  if (key.startsWith(BEHAVIOR_PREFIX)) {
+    const flag = key.slice(BEHAVIOR_PREFIX.length);
+    if (!isBehaviorKey(flag)) throw new Error(`unknown config key: ${key}`);
+    next.behavior[flag] = parseBool(value, key);
+    return next;
+  }
+
   switch (key) {
     case 'provider': {
       if (!VALID_KINDS.has(value)) throw new Error(`invalid provider: ${value}`);
@@ -122,21 +137,6 @@ export function applySetting(config: Config, key: string, value: string): Config
       return next;
     case 'apiKey':
       next.apiKey = value;
-      return next;
-    case 'behavior.autoConfirmSafe':
-      next.behavior.autoConfirmSafe = parseBool(value, key);
-      return next;
-    case 'behavior.explain':
-      next.behavior.explain = parseBool(value, key);
-      return next;
-    case 'behavior.includeHistory':
-      next.behavior.includeHistory = parseBool(value, key);
-      return next;
-    case 'behavior.includeGit':
-      next.behavior.includeGit = parseBool(value, key);
-      return next;
-    case 'behavior.think':
-      next.behavior.think = parseBool(value, key);
       return next;
     default:
       throw new Error(`unknown config key: ${key}`);

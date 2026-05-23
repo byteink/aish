@@ -11,10 +11,10 @@ import { runOnboarding } from './onboarding.ts';
 import { buildInteractivePrompt } from './prompt.ts';
 import { type Message, PROVIDER_LABELS, type Provider, createProvider } from './providers/index.ts';
 import { runCommand } from './runner.ts';
+import { color } from './term.ts';
 import { promptLine } from './tui/prompt-line.tsx';
 import { selectList } from './tui/select-list.tsx';
 import { runSuggestionTui } from './tui/suggestion-app.tsx';
-import { color } from './ui.ts';
 
 /** Print one plain transcript line (no clack chrome, to match the Ink frames). */
 const say = (msg: string): void => {
