@@ -51,7 +51,13 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          set -euo pipefail
+          if npm view "@byteink/aish@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "npm: @byteink/aish@${{ steps.version.outputs.version }} already published, skipping"
+          else
+            npm publish --provenance --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -60,7 +66,9 @@ jobs:
           set -euo pipefail
           mkdir -p out
           build() { # $1 bun-target  $2 os  $3 arch
-            bun build --compile --minify --sourcemap=none --target="$1" src/cli.ts --outfile out/ai
+            # Use the build script (not `bun build --compile` directly) so the
+            # shared react-devtools-core stub plugin is applied; the CLI cannot.
+            bun run scripts/build-binary.ts "$1" out/ai
             tar -czf "out/aish_$2_$3.tar.gz" -C out ai
             rm out/ai
           }
