@@ -7,14 +7,13 @@
  */
 import { type Config, saveConfig, toProviderConfig } from './config.ts';
 import { type ShellContext, gatherContext } from './context.ts';
+import { runSuggestionFlow } from './flow.ts';
 import { runOnboarding } from './onboarding.ts';
 import { buildInteractivePrompt } from './prompt.ts';
 import { type Message, PROVIDER_LABELS, type Provider, createProvider } from './providers/index.ts';
-import { runCommand } from './runner.ts';
 import { color } from './term.ts';
 import { promptLine } from './tui/prompt-line.tsx';
 import { selectList } from './tui/select-list.tsx';
-import { runSuggestionTui } from './tui/suggestion-app.tsx';
 
 /** Print one plain transcript line (no clack chrome, to match the Ink frames). */
 const say = (msg: string): void => {
@@ -72,7 +71,7 @@ export class Session {
   private async turn(userText: string): Promise<void> {
     this.messages.push({ role: 'user', content: userText });
 
-    const outcome = await runSuggestionTui({
+    const outcome = await runSuggestionFlow({
       provider: this.provider,
       behavior: this.config.behavior,
       messages: this.messages,
@@ -81,7 +80,7 @@ export class Session {
 
     switch (outcome.kind) {
       case 'run':
-        await runCommand(outcome.command);
+        // The command (and any failure-fix loop) already executed in the flow.
         return;
       case 'chat':
         say(outcome.message);

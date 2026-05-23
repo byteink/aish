@@ -6,10 +6,9 @@
 import type { Config } from './config.ts';
 import { toProviderConfig } from './config.ts';
 import { gatherContext } from './context.ts';
+import { runSuggestionFlow } from './flow.ts';
 import { buildOneShotPrompt } from './prompt.ts';
 import { type Message, createProvider } from './providers/index.ts';
-import { runCommand } from './runner.ts';
-import { runSuggestionTui } from './tui/suggestion-app.tsx';
 import { logError, logMessage } from './ui.ts';
 
 export async function runOneShot(request: string, config: Config): Promise<void> {
@@ -20,7 +19,7 @@ export async function runOneShot(request: string, config: Config): Promise<void>
     { role: 'user', content: request },
   ];
 
-  const outcome = await runSuggestionTui({
+  const outcome = await runSuggestionFlow({
     provider,
     behavior: config.behavior,
     messages,
@@ -28,7 +27,7 @@ export async function runOneShot(request: string, config: Config): Promise<void>
   });
   switch (outcome.kind) {
     case 'run':
-      await runCommand(outcome.command);
+      // The command (and any failure-fix loop) already executed in the flow.
       return;
     case 'chat':
       logMessage(outcome.message);
