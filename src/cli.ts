@@ -19,11 +19,24 @@ import { runOneShot } from './oneshot.ts';
 import { PROVIDER_LABELS } from './providers/index.ts';
 import { runInShell } from './runtime.ts';
 import { runInteractive } from './session.ts';
+import { color } from './term.ts';
 import { logError, logInfo, note } from './ui.ts';
 
 /** First non-flag token, or undefined if there is none. */
 function firstPositional(rawArgs: string[]): string | undefined {
   return rawArgs.find((a) => !a.startsWith('-'));
+}
+
+/**
+ * The request and interactive flows render with Ink, which requires a raw-mode
+ * TTY on stdin. Exit with a clear message instead of an Ink stack trace when
+ * there is no terminal (piped input, a non-interactive script, or CI).
+ */
+function requireInteractiveTerminal(): void {
+  if (process.stdin.isTTY) return;
+  const hint = 'Run it directly in your shell — not through a pipe or a non-interactive script.';
+  process.stderr.write(`${color.red('aish needs an interactive terminal.')} ${hint}\n`);
+  process.exit(1);
 }
 
 /**
@@ -129,6 +142,7 @@ const queryCmd = defineCommand({
     },
   },
   async run({ rawArgs }) {
+    requireInteractiveTerminal();
     const config = await ensureConfig();
 
     // Everything that is not a flag forms the request. Empty -> interactive.
