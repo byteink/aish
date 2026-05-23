@@ -6,7 +6,7 @@ import type { Config } from './config.ts';
 import { toProviderConfig } from './config.ts';
 import { gatherContext } from './context.ts';
 import { presentSuggestion } from './flow.ts';
-import { buildOneShotPrompt, parseReply } from './prompt.ts';
+import { buildOneShotPrompt, completionLabel, parseReply } from './prompt.ts';
 import { type Message, createProvider } from './providers/index.ts';
 import { collectWithSpinner, logError, logMessage } from './ui.ts';
 
@@ -27,6 +27,7 @@ export async function runOneShot(request: string, config: Config): Promise<void>
       raw = await collectWithSpinner(
         provider.chat(messages, { think: config.behavior.think }),
         'Thinking',
+        (full) => completionLabel(full, 'oneshot', config.behavior.explain),
       );
     } catch (err) {
       logError(`Generation failed: ${(err as Error).message}`);

@@ -140,13 +140,14 @@ export async function confirmPrompt(
 export async function collectWithSpinner(
   gen: AsyncGenerator<string, void, unknown>,
   message = 'Thinking',
+  done: (full: string) => string = () => 'Done',
 ): Promise<string> {
   const spin = p.spinner();
   spin.start(message);
   let full = '';
   try {
     for await (const chunk of gen) full += chunk;
-    spin.stop('Done');
+    spin.stop(done(full));
     return full;
   } catch (err) {
     spin.stop('Failed', 1);

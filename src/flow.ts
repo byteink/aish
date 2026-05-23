@@ -36,13 +36,9 @@ export async function presentSuggestion(
   const safety = scanCommand(suggestion.command);
 
   // Wrap to the terminal width first, then colour each line, so the SGR codes
-  // stay within a line and never bleed into clack's box border.
-  const command = paintLines(wrap(suggestion.command), color.bold);
-  const body =
-    behavior.explain && suggestion.explanation
-      ? `${command}\n\n${paintLines(wrap(suggestion.explanation), color.dim)}`
-      : command;
-  note(body, 'Suggested command');
+  // stay within a line and never bleed into clack's box border. The box holds
+  // the command only; the explanation is shown on the spinner's completion line.
+  note(paintLines(wrap(suggestion.command), color.bold), 'Suggested command');
 
   if (safety.dangerous) {
     logWarn(`${color.red('Potentially destructive:')} ${safety.reasons.join('; ')}.`);

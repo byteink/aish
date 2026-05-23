@@ -18,6 +18,25 @@ export interface ChatReply {
 
 export type ModelReply = CommandSuggestion | ChatReply;
 
+const NO_EXPLANATION = 'No explanation provided.';
+
+/**
+ * The spinner's completion label: the command's one-line explanation when one
+ * is available and explanations are enabled, otherwise a plain 'Done'. This is
+ * what replaces the spinner while the command itself is shown in its own box.
+ */
+export function completionLabel(
+  raw: string,
+  mode: 'oneshot' | 'interactive',
+  explain: boolean,
+): string {
+  const reply = parseReply(raw, mode);
+  if (reply.type === 'command' && explain && reply.explanation !== NO_EXPLANATION) {
+    return reply.explanation;
+  }
+  return 'Done';
+}
+
 export function buildOneShotPrompt(ctx: ShellContext): string {
   return [
     'You are aish, an AI shell assistant. Convert the user request into ONE shell',
@@ -80,7 +99,7 @@ export function parseReply(raw: string, mode: 'oneshot' | 'interactive'): ModelR
   const text = cleaned.trim();
   if (mode === 'interactive') return { type: 'chat', message: text };
   if (looksLikeCommand(text)) {
-    return { type: 'command', command: text, explanation: 'No explanation provided.' };
+    return { type: 'command', command: text, explanation: NO_EXPLANATION };
   }
   return { type: 'chat', message: text };
 }
@@ -99,7 +118,7 @@ function interpretJson(json: RawJson): ModelReply | null {
 
   if (json.type === 'chat' && message) return { type: 'chat', message };
   if (command) {
-    return { type: 'command', command, explanation: explanation || 'No explanation provided.' };
+    return { type: 'command', command, explanation: explanation || NO_EXPLANATION };
   }
   if (message) return { type: 'chat', message };
   return null;

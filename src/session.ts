@@ -7,7 +7,7 @@ import { type Config, saveConfig, toProviderConfig } from './config.ts';
 import { type ShellContext, gatherContext } from './context.ts';
 import { presentSuggestion } from './flow.ts';
 import { runOnboarding } from './onboarding.ts';
-import { buildInteractivePrompt, parseReply } from './prompt.ts';
+import { buildInteractivePrompt, completionLabel, parseReply } from './prompt.ts';
 import { type Message, PROVIDER_LABELS, type Provider, createProvider } from './providers/index.ts';
 import {
   collectWithSpinner,
@@ -81,6 +81,7 @@ export class Session {
         raw = await collectWithSpinner(
           this.provider.chat(this.messages, { think: this.config.behavior.think }),
           'Thinking',
+          (full) => completionLabel(full, 'interactive', this.config.behavior.explain),
         );
       } catch (err) {
         logError(`Generation failed: ${(err as Error).message}`);
