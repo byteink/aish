@@ -19,7 +19,7 @@ to move, **Enter** to choose, **Esc** to cancel.
 
 ## Install
 
-**npm** (runs on Node ≥ 18, no Bun required):
+**npm** (runs on Node ≥ 22, no Bun required):
 
 ```sh
 npm i -g @byteink/aish

@@ -7,6 +7,7 @@
  * executable bit so `npm i -g` and `npx` work without Bun installed.
  */
 import { chmod } from 'node:fs/promises';
+import { stubReactDevtools } from './stub-devtools.ts';
 
 const SHEBANG = '#!/usr/bin/env node\n';
 const OUT_DIR = 'dist';
@@ -17,25 +18,7 @@ const result = await Bun.build({
   outdir: OUT_DIR,
   target: 'node',
   format: 'esm',
-  // Ink statically imports react-devtools-core from a module it only loads
-  // under DEV, but the bundler hoists that import to the top of the bundle.
-  // Stub it to an empty module so the artifact keeps zero runtime deps and
-  // never fails to resolve at startup; the code path that uses it is dead here.
-  plugins: [
-    {
-      name: 'stub-react-devtools',
-      setup(build) {
-        build.onResolve({ filter: /^react-devtools-core$/ }, () => ({
-          path: 'react-devtools-core',
-          namespace: 'stub',
-        }));
-        build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-          contents: 'export default {};',
-          loader: 'js',
-        }));
-      },
-    },
-  ],
+  plugins: [stubReactDevtools],
   minify: true,
   sourcemap: 'none',
   naming: 'cli.mjs',
