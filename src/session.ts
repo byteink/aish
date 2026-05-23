@@ -81,7 +81,7 @@ export class Session {
         raw = await collectWithSpinner(
           this.provider.chat(this.messages, { think: this.config.behavior.think }),
           'Thinking',
-          (full) => completionLabel(full, 'interactive', this.config.behavior.explain),
+          (full) => color.dim(completionLabel(full, 'interactive', this.config.behavior.explain)),
         );
       } catch (err) {
         logError(`Generation failed: ${(err as Error).message}`);

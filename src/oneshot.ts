@@ -8,7 +8,7 @@ import { gatherContext } from './context.ts';
 import { presentSuggestion } from './flow.ts';
 import { buildOneShotPrompt, completionLabel, parseReply } from './prompt.ts';
 import { type Message, createProvider } from './providers/index.ts';
-import { collectWithSpinner, logError, logMessage } from './ui.ts';
+import { collectWithSpinner, color, logError, logMessage } from './ui.ts';
 
 // Bound the revise loop so a misbehaving model can never spin forever.
 const MAX_REVISIONS = 20;
@@ -27,7 +27,7 @@ export async function runOneShot(request: string, config: Config): Promise<void>
       raw = await collectWithSpinner(
         provider.chat(messages, { think: config.behavior.think }),
         'Thinking',
-        (full) => completionLabel(full, 'oneshot', config.behavior.explain),
+        (full) => color.dim(completionLabel(full, 'oneshot', config.behavior.explain)),
       );
     } catch (err) {
       logError(`Generation failed: ${(err as Error).message}`);
