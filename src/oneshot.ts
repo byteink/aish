@@ -1,17 +1,16 @@
 /**
- * One-shot mode: `ai <request>`. Generates a single command, presents the
- * Run/Revise/Copy/Cancel flow, and loops on Revise with the user's feedback.
+ * One-shot mode: `ai <request>`. Generates a single command and drives the
+ * Ink-based Run/Revise/Copy/Cancel frame, which owns the revise loop. The chosen
+ * command is run here, after the frame has closed and released the terminal.
  */
 import type { Config } from './config.ts';
 import { toProviderConfig } from './config.ts';
 import { gatherContext } from './context.ts';
-import { presentSuggestion } from './flow.ts';
-import { buildOneShotPrompt, completionLabel, parseReply } from './prompt.ts';
+import { buildOneShotPrompt } from './prompt.ts';
 import { type Message, createProvider } from './providers/index.ts';
-import { collectWithSpinner, color, logError, logMessage } from './ui.ts';
-
-// Bound the revise loop so a misbehaving model can never spin forever.
-const MAX_REVISIONS = 20;
+import { runCommand } from './runner.ts';
+import { runOneShotTui } from './tui/oneshot-app.tsx';
+import { logError, logMessage } from './ui.ts';
 
 export async function runOneShot(request: string, config: Config): Promise<void> {
   const ctx = await gatherContext(config.behavior);
@@ -21,33 +20,19 @@ export async function runOneShot(request: string, config: Config): Promise<void>
     { role: 'user', content: request },
   ];
 
-  for (let i = 0; i < MAX_REVISIONS; i++) {
-    let raw: string;
-    try {
-      raw = await collectWithSpinner(
-        provider.chat(messages, { think: config.behavior.think }),
-        'Thinking',
-        (full) => color.dim(completionLabel(full, 'oneshot', config.behavior.explain)),
-      );
-    } catch (err) {
-      logError(`Generation failed: ${(err as Error).message}`);
+  const outcome = await runOneShotTui({ provider, behavior: config.behavior, messages });
+  switch (outcome.kind) {
+    case 'run':
+      await runCommand(outcome.command);
+      return;
+    case 'chat':
+      logMessage(outcome.message);
+      return;
+    case 'error':
+      logError(outcome.message);
       process.exitCode = 1;
       return;
-    }
-
-    const reply = parseReply(raw, 'oneshot');
-    if (reply.type === 'chat') {
-      // Model answered conversationally instead of proposing a command.
-      logMessage(reply.message);
+    case 'cancel':
       return;
-    }
-
-    const outcome = await presentSuggestion(reply, config.behavior);
-    if (outcome.kind === 'done') return;
-
-    messages.push({ role: 'assistant', content: raw });
-    messages.push({ role: 'user', content: `Revise the command: ${outcome.feedback}` });
   }
-
-  logError('Too many revisions; stopping.');
 }

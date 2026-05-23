@@ -55,7 +55,10 @@
     "@clack/prompts": "^0.10.0",
     "@types/bun": "^1.1.14",
     "@types/node": "^22.10.0",
+    "@types/react": "^19.2.15",
     "citty": "^0.1.6",
+    "ink": "^7.0.3",
+    "react": "^19.2.6",
     "typescript": "^5.7.0"
   }
 }
