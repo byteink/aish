@@ -1,32 +1,28 @@
 /**
  * Interactive harness: a persistent REPL holding a conversation with the model.
  * Each turn either answers conversationally or proposes a command (reusing the
- * shared Run/Revise/Copy/Cancel flow). Slash commands control the session.
+ * shared Ink suggestion frame). The REPL loop lives here in plain logic; every
+ * interactive unit — the prompt, the suggestion, the model picker — is a
+ * short-lived Ink frame. Slash commands control the session.
  */
 import { type Config, saveConfig, toProviderConfig } from './config.ts';
 import { type ShellContext, gatherContext } from './context.ts';
-import { presentSuggestion } from './flow.ts';
 import { runOnboarding } from './onboarding.ts';
-import { buildInteractivePrompt, completionLabel, parseReply } from './prompt.ts';
+import { buildInteractivePrompt } from './prompt.ts';
 import { type Message, PROVIDER_LABELS, type Provider, createProvider } from './providers/index.ts';
-import {
-  collectWithSpinner,
-  color,
-  intro,
-  isCancel,
-  logError,
-  logInfo,
-  logMessage,
-  logWarn,
-  outro,
-  selectOption,
-  textPrompt,
-} from './ui.ts';
+import { runCommand } from './runner.ts';
+import { promptLine } from './tui/prompt-line.tsx';
+import { selectList } from './tui/select-list.tsx';
+import { runSuggestionTui } from './tui/suggestion-app.tsx';
+import { color } from './ui.ts';
 
-const MAX_REVISIONS = 20;
+/** Print one plain transcript line (no clack chrome, to match the Ink frames). */
+const say = (msg: string): void => {
+  process.stdout.write(`${msg}\n`);
+};
 
 const SLASH_HELP = [
-  '/exit      end the session',
+  '/exit      end the session (aliases: /quit, /bye)',
   '/clear     clear conversation history',
   '/model     switch model',
   '/provider  switch provider (re-run setup)',
@@ -49,15 +45,13 @@ export class Session {
 
   /** Run the REPL until the user exits or aborts. */
   async run(): Promise<void> {
-    intro(color.cyan('aish interactive session'));
-    logInfo(
-      `${PROVIDER_LABELS[this.config.provider]} · ${this.config.model}\n` +
-        `${color.dim('Type a request, or /help for commands.')}`,
-    );
+    say(color.cyan('aish interactive session'));
+    say(color.dim(`${PROVIDER_LABELS[this.config.provider]} · ${this.config.model}`));
+    say(color.dim('Type a request, or /help for commands.'));
 
     for (;;) {
-      const input = await textPrompt('aish ›');
-      if (isCancel(input)) break;
+      const input = await promptLine(color.cyan('aish ›'));
+      if (input === null) break;
       const line = input.trim();
       if (!line) continue;
 
@@ -68,39 +62,36 @@ export class Session {
       await this.turn(line);
     }
 
-    outro('Goodbye.');
+    say(color.dim('Goodbye.'));
   }
 
-  /** A single conversational turn, looping while the user revises a command. */
+  /**
+   * A single conversational turn. The Ink frame owns the revise loop and the
+   * Run/Copy/Cancel actions; here we only persist the resulting output.
+   */
   private async turn(userText: string): Promise<void> {
     this.messages.push({ role: 'user', content: userText });
 
-    for (let i = 0; i < MAX_REVISIONS; i++) {
-      let raw: string;
-      try {
-        raw = await collectWithSpinner(
-          this.provider.chat(this.messages, { think: this.config.behavior.think }),
-          'Thinking',
-          (full) => color.dim(completionLabel(full, 'interactive', this.config.behavior.explain)),
-        );
-      } catch (err) {
-        logError(`Generation failed: ${(err as Error).message}`);
-        return;
-      }
-      this.messages.push({ role: 'assistant', content: raw });
+    const outcome = await runSuggestionTui({
+      provider: this.provider,
+      behavior: this.config.behavior,
+      messages: this.messages,
+      mode: 'interactive',
+    });
 
-      const reply = parseReply(raw, 'interactive');
-      if (reply.type === 'chat') {
-        logMessage(reply.message);
+    switch (outcome.kind) {
+      case 'run':
+        await runCommand(outcome.command);
         return;
-      }
-
-      const outcome = await presentSuggestion(reply, this.config.behavior);
-      if (outcome.kind === 'done') return;
-      this.messages.push({ role: 'user', content: `Revise the command: ${outcome.feedback}` });
+      case 'chat':
+        say(outcome.message);
+        return;
+      case 'error':
+        say(color.red(outcome.message));
+        return;
+      case 'cancel':
+        return;
     }
-
-    logWarn('Too many revisions; ending this turn.');
   }
 
   /** Handle a slash command. Returns false when the session should end. */
@@ -109,10 +100,11 @@ export class Session {
     switch (cmd) {
       case '/exit':
       case '/quit':
+      case '/bye':
         return false;
       case '/clear':
         this.messages = [{ role: 'system', content: buildInteractivePrompt(this.ctx) }];
-        logInfo('History cleared.');
+        say(color.dim('History cleared.'));
         return true;
       case '/model':
         await this.switchModel();
@@ -124,10 +116,10 @@ export class Session {
         await this.toggleThink();
         return true;
       case '/help':
-        logInfo(SLASH_HELP);
+        say(color.dim(SLASH_HELP));
         return true;
       default:
-        logWarn(`Unknown command: ${cmd}. Try /help.`);
+        say(color.yellow(`Unknown command: ${cmd}. Try /help.`));
         return true;
     }
   }
@@ -136,7 +128,7 @@ export class Session {
     const think = !this.config.behavior.think;
     this.config = { ...this.config, behavior: { ...this.config.behavior, think } };
     await saveConfig(this.config);
-    logInfo(`Model reasoning ${think ? 'enabled' : 'disabled'}.`);
+    say(color.dim(`Model reasoning ${think ? 'enabled' : 'disabled'}.`));
   }
 
   private async switchModel(): Promise<void> {
@@ -144,30 +136,27 @@ export class Session {
     try {
       models = await this.provider.listModels();
     } catch (err) {
-      logError(`Could not list models: ${(err as Error).message}`);
+      say(color.red(`Could not list models: ${(err as Error).message}`));
       return;
     }
     if (models.length === 0) {
-      logWarn('No models reported by the provider.');
+      say(color.yellow('No models reported by the provider.'));
       return;
     }
-    const choice = await selectOption(
-      'Switch model',
-      models.map((m) => ({ value: m, label: m })),
-    );
-    if (isCancel(choice)) return;
+    const choice = await selectList('Switch model', models);
+    if (choice === null) return;
 
     this.config = { ...this.config, model: choice };
     this.provider = createProvider(toProviderConfig(this.config));
     await saveConfig(this.config);
-    logInfo(`Now using ${choice}.`);
+    say(color.dim(`Now using ${choice}.`));
   }
 
   private async switchProvider(): Promise<void> {
     const config = await runOnboarding();
     this.config = config;
     this.provider = createProvider(toProviderConfig(config));
-    logInfo(`Switched to ${PROVIDER_LABELS[config.provider]} · ${config.model}.`);
+    say(color.dim(`Switched to ${PROVIDER_LABELS[config.provider]} · ${config.model}.`));
   }
 }
 

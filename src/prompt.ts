@@ -20,23 +20,6 @@ export type ModelReply = CommandSuggestion | ChatReply;
 
 const NO_EXPLANATION = 'No explanation provided.';
 
-/**
- * The spinner's completion label: the command's one-line explanation when one
- * is available and explanations are enabled, otherwise a plain 'Done'. This is
- * what replaces the spinner while the command itself is shown in its own box.
- */
-export function completionLabel(
-  raw: string,
-  mode: 'oneshot' | 'interactive',
-  explain: boolean,
-): string {
-  const reply = parseReply(raw, mode);
-  if (reply.type === 'command' && explain && reply.explanation !== NO_EXPLANATION) {
-    return reply.explanation;
-  }
-  return 'Done';
-}
-
 export function buildOneShotPrompt(ctx: ShellContext): string {
   return [
     'You are aish, an AI shell assistant. Convert the user request into ONE shell',

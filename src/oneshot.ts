@@ -9,7 +9,7 @@ import { gatherContext } from './context.ts';
 import { buildOneShotPrompt } from './prompt.ts';
 import { type Message, createProvider } from './providers/index.ts';
 import { runCommand } from './runner.ts';
-import { runOneShotTui } from './tui/oneshot-app.tsx';
+import { runSuggestionTui } from './tui/suggestion-app.tsx';
 import { logError, logMessage } from './ui.ts';
 
 export async function runOneShot(request: string, config: Config): Promise<void> {
@@ -20,7 +20,12 @@ export async function runOneShot(request: string, config: Config): Promise<void>
     { role: 'user', content: request },
   ];
 
-  const outcome = await runOneShotTui({ provider, behavior: config.behavior, messages });
+  const outcome = await runSuggestionTui({
+    provider,
+    behavior: config.behavior,
+    messages,
+    mode: 'oneshot',
+  });
   switch (outcome.kind) {
     case 'run':
       await runCommand(outcome.command);

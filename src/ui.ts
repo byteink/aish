@@ -75,13 +75,7 @@ function wrapLine(line: string, limit: number): string {
   return out.join('\n');
 }
 
-/** Apply a colour function to each line independently (keeps ANSI per line). */
-export function paintLines(text: string, paint: (s: string) => string): string {
-  return text.split('\n').map(paint).join('\n');
-}
-
 export const intro = (msg: string): void => p.intro(msg);
-export const outro = (msg: string): void => p.outro(msg);
 export const note = (body: string, title?: string): void => p.note(body, title);
 export const logInfo = (msg: string): void => p.log.info(wrap(msg));
 export const logWarn = (msg: string): void => p.log.warn(wrap(msg));
@@ -123,34 +117,4 @@ export const spinner = (): ReturnType<typeof p.spinner> => p.spinner();
 
 export async function passwordPrompt(message: string): Promise<string | symbol> {
   return p.password({ message });
-}
-
-export async function confirmPrompt(
-  message: string,
-  initialValue = false,
-): Promise<boolean | symbol> {
-  return p.confirm({ message, initialValue });
-}
-
-/**
- * Drive a text-chunk generator to completion behind a spinner, returning the
- * full concatenated text. Streaming happens at the transport layer; the user
- * sees a live "thinking" indicator while tokens are collected.
- */
-export async function collectWithSpinner(
-  gen: AsyncGenerator<string, void, unknown>,
-  message = 'Thinking',
-  done: (full: string) => string = () => 'Done',
-): Promise<string> {
-  const spin = p.spinner();
-  spin.start(message);
-  let full = '';
-  try {
-    for await (const chunk of gen) full += chunk;
-    spin.stop(done(full));
-    return full;
-  } catch (err) {
-    spin.stop('Failed', 1);
-    throw err;
-  }
 }

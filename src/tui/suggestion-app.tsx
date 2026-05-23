@@ -1,9 +1,10 @@
 /**
- * Experimental Ink front-end for one-shot mode. The entire interaction —
- * thinking, the command suggestion, the action row, and the revise loop — lives
- * in a single in-place frame that erases itself on exit, so the only thing left
- * in the scrollback is the command the user actually ran. Generation and the
- * revise loop run inside the component; the host only runs the chosen command.
+ * The command-suggestion frame, shared by one-shot and interactive modes. The
+ * whole interaction — thinking, the suggestion, the action row, the revise
+ * loop, and the destructive-command confirm — lives in a single in-place frame
+ * that erases itself on exit, leaving only the chosen result in the scrollback.
+ * Generation and the revise loop run inside the component; the host runs the
+ * chosen command after the frame closes and releases the terminal.
  */
 import { Box, Text, render, useApp, useInput } from 'ink';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,11 +14,12 @@ import { parseReply } from '../prompt.ts';
 import type { Message, Provider } from '../providers/index.ts';
 import { copyToClipboard } from '../runtime.ts';
 import { scanCommand } from '../safety.ts';
+import { Spinner, TextInput } from './components.tsx';
 
 const MAX_REVISIONS = 20;
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const ACTIONS = ['Run', 'Revise', 'Copy', 'Cancel'] as const;
 type Action = (typeof ACTIONS)[number];
+type Mode = 'oneshot' | 'interactive';
 
 /** What the host should do once the frame closes. */
 export type TuiOutcome =
@@ -32,48 +34,11 @@ interface AppProps {
   provider: Provider;
   behavior: BehaviorConfig;
   messages: Message[];
+  mode: Mode;
   onDone: (outcome: TuiOutcome) => void;
 }
 
-/** A small braille spinner that advances on a fixed interval. */
-function Spinner() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setI((n) => (n + 1) % SPINNER.length), 80);
-    return () => clearInterval(id);
-  }, []);
-  return <Text color="cyan">{SPINNER[i]}</Text>;
-}
-
-/** Minimal single-line text input: typing, backspace, Enter, Esc. */
-function TextInput({
-  value,
-  placeholder,
-  onChange,
-  onSubmit,
-  onCancel,
-}: Readonly<{
-  value: string;
-  placeholder: string;
-  onChange: (v: string) => void;
-  onSubmit: (v: string) => void;
-  onCancel: () => void;
-}>) {
-  useInput((input, key) => {
-    if (key.return) return onSubmit(value);
-    if (key.escape) return onCancel();
-    if (key.backspace || key.delete) return onChange(value.slice(0, -1));
-    if (input && !key.ctrl && !key.meta) onChange(value + input);
-  });
-  return (
-    <Text>
-      {value ? <Text>{value}</Text> : <Text dimColor>{placeholder}</Text>}
-      <Text inverse> </Text>
-    </Text>
-  );
-}
-
-function App({ provider, behavior, messages, onDone }: Readonly<AppProps>) {
+function App({ provider, behavior, messages, mode, onDone }: Readonly<AppProps>) {
   const { exit } = useApp();
   const alive = useRef(true);
   const revisions = useRef(0);
@@ -105,7 +70,7 @@ function App({ provider, behavior, messages, onDone }: Readonly<AppProps>) {
     }
     if (!alive.current) return;
     messages.push({ role: 'assistant', content: full });
-    const reply = parseReply(full, 'oneshot');
+    const reply = parseReply(full, mode);
     if (reply.type === 'chat') {
       finish({ kind: 'chat', message: reply.message });
       return;
@@ -120,7 +85,7 @@ function App({ provider, behavior, messages, onDone }: Readonly<AppProps>) {
     setSel(0);
     setCopied(false);
     setPhase('suggest');
-  }, [provider, behavior, messages, finish]);
+  }, [provider, behavior, messages, mode, finish]);
 
   // Kick off the first generation, and mark the component dead on unmount so a
   // late-resolving stream never writes state into a torn-down tree.
@@ -249,13 +214,16 @@ function App({ provider, behavior, messages, onDone }: Readonly<AppProps>) {
 }
 
 /**
- * Render the one-shot Ink app and resolve once the user picks an outcome. The
- * live frame is cleared before unmount so it leaves no scrollback trace.
+ * Render the suggestion frame and resolve once the user picks an outcome. The
+ * live frame is cleared before unmount so it leaves no scrollback trace; the
+ * host is responsible for any persistent output (running the command, printing
+ * a chat reply, or reporting an error).
  */
-export function runOneShotTui(params: {
+export function runSuggestionTui(params: {
   provider: Provider;
   behavior: BehaviorConfig;
   messages: Message[];
+  mode: Mode;
 }): Promise<TuiOutcome> {
   return new Promise((resolve) => {
     let settled = false;
@@ -270,6 +238,7 @@ export function runOneShotTui(params: {
         provider={params.provider}
         behavior={params.behavior}
         messages={params.messages}
+        mode={params.mode}
         onDone={onDone}
       />,
     );
