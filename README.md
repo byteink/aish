@@ -10,12 +10,12 @@ out of the box, and also supports OpenAI and Anthropic.
 ```text
 $ ai list all files larger than 100MB in this directory
 
-  Suggested command
-  find . -type f -size +100M
-  Find files over 100 MB under the current directory
-
-  ? What next?  › Run / Revise / Copy / Cancel
+▌ find . -type f -size +100M    Find files over 100 MB under the current directory
+  Run · Revise · Copy · Cancel
 ```
+
+The command appears with a one-line explanation and an action row: use **←/→**
+to move, **Enter** to choose, **Esc** to cancel.
 
 ## Install
 
@@ -52,7 +52,8 @@ interpret them before aish sees them:
 ai "what's using port 8080?"
 ```
 
-You get the suggested command plus a one-line explanation, then a prompt:
+You get the suggested command plus a one-line explanation, then an action row
+(←/→ to move, Enter to choose, Esc to cancel):
 
 - **Run**: execute it in your shell, output streamed live
 - **Revise**: give feedback and get a new command
@@ -69,12 +70,14 @@ Slash commands:
 
 | Command | Action |
 |---|---|
-| `/exit` | end the session |
+| `/exit` | end the session (aliases: `/quit`, `/bye`) |
 | `/clear` | clear conversation history |
-| `/model` | switch model |
+| `/model` | switch model (↑/↓ to pick) |
 | `/provider` | switch provider (re-run setup) |
 | `/think` | toggle model reasoning on/off |
 | `/help` | list commands |
+
+You can also end the session with Ctrl-C or Esc at the prompt.
 
 ## Providers
 
@@ -100,8 +103,10 @@ ai config set baseUrl https://ollama.box.lan/v1
 ai config set apiKey   my-gateway-token       # only if the endpoint needs it
 ```
 
-All four providers implement a common streaming `chat()` interface, so adding a
-provider is a single small file.
+All four providers implement a common streaming `chat()` interface. The three
+OpenAI-compatible ones (Ollama, LM Studio, OpenAI) extend a shared base class
+and are dispatched through a small registry, so adding a vendor is a thin
+subclass plus one entry.
 
 ## Configuration
 
