@@ -6,6 +6,7 @@
  */
 import { spawn as nodeSpawn } from 'node:child_process';
 import { mkdir, chmod as nodeChmod, readFile, writeFile } from 'node:fs/promises';
+import { StringDecoder } from 'node:string_decoder';
 
 declare const Bun: typeof import('bun') | undefined;
 
@@ -94,6 +95,58 @@ export function runInShell(command: string, shell: string): Promise<number> {
     });
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 0));
+  });
+}
+
+/** Outcome of a teed run: the exit code and the captured output transcript. */
+export interface ShellRunResult {
+  code: number;
+  output: string;
+}
+
+// Upper bound on captured output kept for feeding back to the model. The user
+// still sees the full stream live; we retain only the tail, where errors land.
+const MAX_CAPTURE_BYTES = 32 * 1024;
+
+/**
+ * Run a command in the user's shell exactly like {@link runInShell} — live
+ * stdout/stderr, inherited stdin so prompts still work — but also capture the
+ * combined output transcript and resolve with it alongside the exit code.
+ *
+ * Capturing requires piping stdout/stderr rather than inheriting them, so the
+ * child sees a pipe, not a TTY (programs may drop colour or paging). That is an
+ * acceptable trade for a command runner; the interactive `$EDITOR` path keeps
+ * using {@link runInShell} so full-screen programs are unaffected.
+ */
+export function runInShellCapture(command: string, shell: string): Promise<ShellRunResult> {
+  const shellName = shell.slice(shell.lastIndexOf('/') + 1);
+  const args = shellInvocation(shellName);
+  return new Promise((resolve, reject) => {
+    const child = nodeSpawn(shell, args, {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      env: { ...process.env, [COMMAND_ENV]: command },
+    });
+
+    let captured = '';
+    const append = (text: string): void => {
+      captured += text;
+      if (captured.length > MAX_CAPTURE_BYTES) captured = captured.slice(-MAX_CAPTURE_BYTES);
+    };
+    // Write raw bytes to the terminal for a byte-exact live view; decode a
+    // separate copy per stream so multi-byte runes split across chunks survive.
+    const tee = (src: NodeJS.ReadableStream | null, sink: NodeJS.WriteStream): void => {
+      if (!src) return;
+      const decoder = new StringDecoder('utf8');
+      src.on('data', (chunk: Buffer) => {
+        sink.write(chunk);
+        append(decoder.write(chunk));
+      });
+    };
+    tee(child.stdout, process.stdout);
+    tee(child.stderr, process.stderr);
+
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 0, output: captured }));
   });
 }
 
