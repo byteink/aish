@@ -12,6 +12,7 @@ import {
   type ProviderConfig,
   type ProviderKind,
   createProvider,
+  isRemote,
 } from './providers/index.ts';
 import { color } from './term.ts';
 import {
@@ -66,8 +67,7 @@ export async function runOnboarding(): Promise<Config> {
   const detected = await collectDetected();
   const kind = await chooseProvider(detected);
 
-  const config =
-    kind === 'openai' || kind === 'anthropic' ? await setupRemote(kind) : await setupLocal(kind);
+  const config = isRemote(kind) ? await setupRemote(kind) : await setupLocal(kind);
 
   await saveConfig(config);
   logSuccess(
@@ -106,6 +106,11 @@ async function chooseProvider(detected: Detected[]): Promise<ProviderKind> {
   options.push({
     value: 'anthropic',
     label: PROVIDER_LABELS.anthropic,
+    hint: 'remote, needs API key',
+  });
+  options.push({
+    value: 'openrouter',
+    label: PROVIDER_LABELS.openrouter,
     hint: 'remote, needs API key',
   });
 

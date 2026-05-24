@@ -41,6 +41,11 @@ describe('applySetting', () => {
     expect(() => applySetting(base, 'provider', 'gemini')).toThrow();
   });
 
+  test('accepts openrouter as a provider', () => {
+    expect(applySetting(base, 'provider', 'openrouter').provider).toBe('openrouter');
+    expect(makeConfig('openrouter', 'openai/gpt-4o').baseUrl).toBe('https://openrouter.ai/api/v1');
+  });
+
   test('rejects an unknown key', () => {
     expect(() => applySetting(base, 'nope', 'x')).toThrow();
   });

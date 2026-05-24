@@ -7,6 +7,7 @@ import { AnthropicProvider } from './anthropic.ts';
 import { LMStudioProvider } from './lmstudio.ts';
 import { OllamaProvider } from './ollama.ts';
 import { OpenAIProvider } from './openai.ts';
+import { OpenRouterProvider } from './openrouter.ts';
 
 export type Role = 'system' | 'user' | 'assistant';
 
@@ -26,7 +27,7 @@ export interface ChatOptions {
   think?: boolean;
 }
 
-export type ProviderKind = 'ollama' | 'lmstudio' | 'openai' | 'anthropic';
+export type ProviderKind = 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'openrouter';
 
 export interface ProviderConfig {
   kind: ProviderKind;
@@ -51,6 +52,7 @@ export const DEFAULT_BASE_URLS: Record<ProviderKind, string> = {
   lmstudio: 'http://localhost:1234/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
 };
 
 export const PROVIDER_LABELS: Record<ProviderKind, string> = {
@@ -58,10 +60,11 @@ export const PROVIDER_LABELS: Record<ProviderKind, string> = {
   lmstudio: 'LM Studio',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
 };
 
 export function isRemote(kind: ProviderKind): boolean {
-  return kind === 'openai' || kind === 'anthropic';
+  return kind === 'openai' || kind === 'anthropic' || kind === 'openrouter';
 }
 
 // Registry of provider constructors. Adding a vendor means adding its class and
@@ -71,6 +74,7 @@ const PROVIDERS: Record<ProviderKind, new (config: ProviderConfig) => Provider> 
   lmstudio: LMStudioProvider,
   openai: OpenAIProvider,
   anthropic: AnthropicProvider,
+  openrouter: OpenRouterProvider,
 };
 
 /** Build a concrete provider from config. The single dispatch point. */

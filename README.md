@@ -5,7 +5,7 @@
 `aish` installs an `ai` command that converts plain English into a shell command
 idiomatic to your OS and shell, shows you what it will run, and lets you run,
 revise, copy, or cancel. It is **local-first**: it talks to Ollama or LM Studio
-out of the box, and also supports OpenAI and Anthropic.
+out of the box, and also supports OpenAI, Anthropic, and OpenRouter.
 
 ```text
 $ ai list all files larger than 100MB in this directory
@@ -91,6 +91,7 @@ configured yet, running `ai <request>` starts this setup automatically.
 | LM Studio | `http://localhost:1234/v1` | optional API key |
 | OpenAI | `https://api.openai.com/v1` | API key required |
 | Anthropic | `https://api.anthropic.com/v1` | API key required |
+| OpenRouter | `https://openrouter.ai/api/v1` | API key required |
 
 **Local providers are not limited to localhost.** Ollama and LM Studio can run
 on another machine, a LAN address, a reverse proxy, or a tunnel. During setup
@@ -103,10 +104,10 @@ ai config set baseUrl https://ollama.box.lan/v1
 ai config set apiKey   my-gateway-token       # only if the endpoint needs it
 ```
 
-All four providers implement a common streaming `chat()` interface. The three
-OpenAI-compatible ones (Ollama, LM Studio, OpenAI) extend a shared base class
-and are dispatched through a small registry, so adding a vendor is a thin
-subclass plus one entry.
+All five providers implement a common streaming `chat()` interface. The four
+OpenAI-compatible ones (Ollama, LM Studio, OpenAI, OpenRouter) extend a shared
+base class and are dispatched through a small registry, so adding a vendor is a
+thin subclass plus one entry.
 
 ## Configuration
 

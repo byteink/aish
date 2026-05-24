@@ -33,12 +33,9 @@ export interface Config {
   behavior: BehaviorConfig;
 }
 
-const VALID_KINDS: ReadonlySet<string> = new Set<ProviderKind>([
-  'ollama',
-  'lmstudio',
-  'openai',
-  'anthropic',
-]);
+// Derived from the provider registry so a new provider is accepted everywhere
+// the moment it is added there — no second list to keep in sync.
+const VALID_KINDS: ReadonlySet<string> = new Set<string>(Object.keys(DEFAULT_BASE_URLS));
 
 export const DEFAULT_BEHAVIOR: BehaviorConfig = {
   autoConfirmSafe: false,
