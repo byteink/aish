@@ -31,6 +31,14 @@ export function terminalColumns(): number {
   return cols && cols > 0 ? cols : FALLBACK_WIDTH;
 }
 
+const FALLBACK_ROWS = 24;
+
+/** Current terminal height in rows, or a sane default when not a TTY. */
+export function terminalRows(): number {
+  const rows = process.stdout.rows;
+  return rows && rows > 0 ? rows : FALLBACK_ROWS;
+}
+
 /**
  * Word-wrap text to the terminal width, preserving existing line breaks and
  * hard-breaking tokens longer than the line (e.g. URLs or long flags). Used to

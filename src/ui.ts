@@ -5,7 +5,7 @@
  */
 import * as p from '@clack/prompts';
 import type { Option } from '@clack/prompts';
-import { wrap } from './term.ts';
+import { terminalRows, wrap } from './term.ts';
 
 export const intro = (msg: string): void => p.intro(msg);
 export const note = (body: string, title?: string): void => p.note(body, title);
@@ -29,7 +29,13 @@ export async function selectOption<T extends string>(
 ): Promise<T | symbol> {
   // clack's Option is a conditional type over the generic, which won't unify
   // with our concrete element type; the cast is the documented escape hatch.
-  return p.select<T>({ message, options: options as Option<T>[] });
+  // maxItems caps the rendered window so a long model list scrolls instead of
+  // overflowing the terminal; short lists (e.g. the provider menu) are unaffected.
+  return p.select<T>({
+    message,
+    options: options as Option<T>[],
+    maxItems: Math.max(5, terminalRows() - 6),
+  });
 }
 
 export interface TextOpts {
