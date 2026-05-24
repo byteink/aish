@@ -152,6 +152,11 @@ export class Session {
   }
 
   private async switchProvider(): Promise<void> {
+    // The Ink prompt frame unrefs stdin on unmount (its raw-mode teardown), so
+    // the clack prompts below would leave the event loop with nothing to keep it
+    // alive and Node would exit cleanly the moment a prompt awaits input. Re-ref
+    // stdin so onboarding's prompts hold the process open.
+    process.stdin.ref();
     const config = await runOnboarding();
     this.config = config;
     this.provider = createProvider(toProviderConfig(config));
