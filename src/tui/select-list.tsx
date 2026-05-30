@@ -107,3 +107,21 @@ export function selectList(message: string, items: readonly string[]): Promise<s
     <SelectList message={message} items={items} resolve={resolve} />
   ));
 }
+
+/**
+ * Pick from labelled options and get the chosen option's value back, so callers
+ * never round-trip a display string through `indexOf`/a lookup map. Labels are
+ * assumed distinct. Resolves to the value, or null when cancelled.
+ */
+export async function selectKeyed<T>(
+  message: string,
+  options: ReadonlyArray<{ label: string; value: T }>,
+): Promise<T | null> {
+  const choice = await selectList(
+    message,
+    options.map((o) => o.label),
+  );
+  if (choice === null) return null;
+  const match = options.find((o) => o.label === choice);
+  return match ? match.value : null;
+}

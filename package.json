@@ -52,7 +52,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@clack/prompts": "^0.10.0",
     "@types/bun": "^1.1.14",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.15",

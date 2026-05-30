@@ -1,7 +1,10 @@
 /**
  * Config lives in ~/.aish/config.json at 0600. It records the active provider,
- * endpoint, model, optional API key, and behaviour flags. All reads validate
- * shape so a hand-edited file can never crash the tool silently.
+ * behaviour flags, and a `providers` map of every provider the user has
+ * configured (endpoint, model, optional key) so they can switch between them
+ * without re-entering credentials. The active connection is `providers[provider]`
+ * — there is no duplicated top-level copy to drift. All reads validate shape so a
+ * hand-edited file can never crash the tool silently.
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -25,12 +28,18 @@ export interface BehaviorConfig {
   think: boolean;
 }
 
-export interface Config {
-  provider: ProviderKind;
+/** A saved provider's connection details, reused when switching back to it. */
+export interface ProviderProfile {
   baseUrl: string;
   model: string;
   apiKey?: string;
+}
+
+export interface Config {
+  provider: ProviderKind;
   behavior: BehaviorConfig;
+  /** Every configured provider, keyed by kind. Always includes `provider`. */
+  providers: Partial<Record<ProviderKind, ProviderProfile>>;
 }
 
 // Derived from the provider registry so a new provider is accepted everywhere
@@ -64,7 +73,7 @@ export async function loadConfig(): Promise<Config | null> {
   } catch {
     throw new Error(`config at ${configPath()} is not valid JSON`);
   }
-  return validate(parsed);
+  return parseConfig(parsed);
 }
 
 /** Persist config, creating ~/.aish at 0700 and the file at 0600. */
@@ -74,28 +83,71 @@ export async function saveConfig(config: Config): Promise<void> {
   await chmod(configPath(), 0o600);
 }
 
+/** The active provider's profile. The active provider is always configured. */
+export function activeProfile(config: Config): ProviderProfile {
+  const profile = config.providers[config.provider];
+  if (!profile) throw new Error(`active provider has no profile: ${config.provider}`);
+  return profile;
+}
+
+/** Build the `createProvider` input for a saved profile. */
+export function profileToProviderConfig(
+  kind: ProviderKind,
+  profile: ProviderProfile,
+): ProviderConfig {
+  const base: ProviderConfig = { kind, baseUrl: profile.baseUrl, model: profile.model };
+  return profile.apiKey ? { ...base, apiKey: profile.apiKey } : base;
+}
+
 /** Map persisted config to what `createProvider` expects. */
 export function toProviderConfig(config: Config): ProviderConfig {
-  const base: ProviderConfig = {
-    kind: config.provider,
-    baseUrl: config.baseUrl,
-    model: config.model,
-  };
-  return config.apiKey ? { ...base, apiKey: config.apiKey } : base;
+  return profileToProviderConfig(config.provider, activeProfile(config));
 }
 
 /** Build a fresh config for a chosen provider/model with sane defaults. */
 export function makeConfig(
   kind: ProviderKind,
   model: string,
-  overrides?: Partial<Pick<Config, 'baseUrl' | 'apiKey'>>,
+  overrides?: { baseUrl?: string; apiKey?: string },
 ): Config {
-  return {
-    provider: kind,
+  const profile: ProviderProfile = {
     baseUrl: overrides?.baseUrl ?? DEFAULT_BASE_URLS[kind],
     model,
-    ...(overrides?.apiKey ? { apiKey: overrides.apiKey } : {}),
-    behavior: { ...DEFAULT_BEHAVIOR },
+  };
+  if (overrides?.apiKey) profile.apiKey = overrides.apiKey;
+  return { provider: kind, behavior: { ...DEFAULT_BEHAVIOR }, providers: { [kind]: profile } };
+}
+
+/** Configured provider kinds, the active one first, then alphabetical. */
+export function listProviders(config: Config): ProviderKind[] {
+  return (Object.keys(config.providers) as ProviderKind[]).sort((a, b) => {
+    if (a === config.provider) return -1;
+    if (b === config.provider) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+export function getProfile(config: Config, kind: ProviderKind): ProviderProfile | undefined {
+  return config.providers[kind];
+}
+
+/** Replace the active provider's profile. */
+function setActiveProfile(config: Config, profile: ProviderProfile): Config {
+  return { ...config, providers: { ...config.providers, [config.provider]: profile } };
+}
+
+/**
+ * Switch the active provider to a previously configured `kind`, recording the
+ * given model on its profile. Behaviour and other profiles are preserved.
+ * Throws if the provider was never configured.
+ */
+export function activate(config: Config, kind: ProviderKind, model: string): Config {
+  const profile = config.providers[kind];
+  if (!profile) throw new Error(`provider not configured: ${kind}`);
+  return {
+    ...config,
+    provider: kind,
+    providers: { ...config.providers, [kind]: { ...profile, model } },
   };
 }
 
@@ -108,33 +160,30 @@ function isBehaviorKey(key: string): key is keyof BehaviorConfig {
 
 /**
  * Apply a dotted `key=value` setting (e.g. `behavior.explain=false`) to a
- * config, returning the updated copy. Validates keys and coerces booleans.
+ * config, returning the updated copy. `model`/`baseUrl`/`apiKey` edit the active
+ * provider's profile; `provider` switches to an already-configured one (adding a
+ * provider is the interactive `/provider` flow's job, not a blind field write).
  */
 export function applySetting(config: Config, key: string, value: string): Config {
-  const next: Config = { ...config, behavior: { ...config.behavior } };
-
   if (key.startsWith(BEHAVIOR_PREFIX)) {
     const flag = key.slice(BEHAVIOR_PREFIX.length);
     if (!isBehaviorKey(flag)) throw new Error(`unknown config key: ${key}`);
-    next.behavior[flag] = parseBool(value, key);
-    return next;
+    return { ...config, behavior: { ...config.behavior, [flag]: parseBool(value, key) } };
   }
 
   switch (key) {
     case 'provider': {
       if (!VALID_KINDS.has(value)) throw new Error(`invalid provider: ${value}`);
-      next.provider = value as ProviderKind;
-      return next;
+      const profile = config.providers[value as ProviderKind];
+      if (!profile) throw new Error(`provider not configured: ${value}`);
+      return activate(config, value as ProviderKind, profile.model);
     }
     case 'baseUrl':
-      next.baseUrl = value;
-      return next;
+      return setActiveProfile(config, { ...activeProfile(config), baseUrl: value });
     case 'model':
-      next.model = value;
-      return next;
+      return setActiveProfile(config, { ...activeProfile(config), model: value });
     case 'apiKey':
-      next.apiKey = value;
-      return next;
+      return setActiveProfile(config, { ...activeProfile(config), apiKey: value });
     default:
       throw new Error(`unknown config key: ${key}`);
   }
@@ -146,7 +195,11 @@ function parseBool(value: string, key: string): boolean {
   throw new Error(`${key} expects true or false, got "${value}"`);
 }
 
-function validate(input: unknown): Config {
+/**
+ * Validate and normalise parsed JSON into a `Config`, migrating a legacy
+ * single-provider file. Throws on anything it cannot safely repair.
+ */
+export function parseConfig(input: unknown): Config {
   if (typeof input !== 'object' || input === null) {
     throw new Error('config must be a JSON object');
   }
@@ -155,21 +208,22 @@ function validate(input: unknown): Config {
   if (typeof obj.provider !== 'string' || !VALID_KINDS.has(obj.provider)) {
     throw new Error(`config.provider is missing or invalid: ${String(obj.provider)}`);
   }
-  if (typeof obj.baseUrl !== 'string' || obj.baseUrl.length === 0) {
-    throw new Error('config.baseUrl is missing');
+  const provider = obj.provider as ProviderKind;
+
+  const providers = parseProviders(obj.providers);
+  // Migrate a pre-`providers` file: its single connection lived in top-level
+  // baseUrl/model/apiKey fields, which become the active provider's profile.
+  if (!providers[provider]) {
+    const legacy = legacyProfile(obj);
+    if (legacy) providers[provider] = legacy;
   }
-  if (typeof obj.model !== 'string' || obj.model.length === 0) {
-    throw new Error('config.model is missing');
-  }
-  if (obj.apiKey !== undefined && typeof obj.apiKey !== 'string') {
-    throw new Error('config.apiKey must be a string');
+  if (!providers[provider]) {
+    throw new Error(`config.provider "${provider}" has no saved profile`);
   }
 
   const behavior = (obj.behavior ?? {}) as Record<string, unknown>;
-  const config: Config = {
-    provider: obj.provider as ProviderKind,
-    baseUrl: obj.baseUrl,
-    model: obj.model,
+  return {
+    provider,
     behavior: {
       autoConfirmSafe: asBool(behavior.autoConfirmSafe, DEFAULT_BEHAVIOR.autoConfirmSafe),
       explain: asBool(behavior.explain, DEFAULT_BEHAVIOR.explain),
@@ -177,9 +231,32 @@ function validate(input: unknown): Config {
       includeGit: asBool(behavior.includeGit, DEFAULT_BEHAVIOR.includeGit),
       think: asBool(behavior.think, DEFAULT_BEHAVIOR.think),
     },
+    providers,
   };
-  if (typeof obj.apiKey === 'string') config.apiKey = obj.apiKey;
-  return config;
+}
+
+/** A profile from a legacy single-provider file's top-level fields, if valid. */
+function legacyProfile(obj: Record<string, unknown>): ProviderProfile | undefined {
+  if (typeof obj.baseUrl !== 'string' || obj.baseUrl.length === 0) return undefined;
+  if (typeof obj.model !== 'string' || obj.model.length === 0) return undefined;
+  const profile: ProviderProfile = { baseUrl: obj.baseUrl, model: obj.model };
+  if (typeof obj.apiKey === 'string') profile.apiKey = obj.apiKey;
+  return profile;
+}
+
+/** Validate the saved `providers` map, dropping any malformed entry. */
+function parseProviders(input: unknown): Partial<Record<ProviderKind, ProviderProfile>> {
+  const out: Partial<Record<ProviderKind, ProviderProfile>> = {};
+  if (typeof input !== 'object' || input === null) return out;
+  for (const [kind, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!VALID_KINDS.has(kind) || typeof raw !== 'object' || raw === null) continue;
+    const p = raw as Record<string, unknown>;
+    if (typeof p.baseUrl !== 'string' || typeof p.model !== 'string') continue;
+    const profile: ProviderProfile = { baseUrl: p.baseUrl, model: p.model };
+    if (typeof p.apiKey === 'string') profile.apiKey = p.apiKey;
+    out[kind as ProviderKind] = profile;
+  }
+  return out;
 }
 
 function asBool(value: unknown, fallback: boolean): boolean {

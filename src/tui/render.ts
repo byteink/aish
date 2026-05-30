@@ -27,6 +27,13 @@ export function runFrame<T>(
       instance.unmount();
       resolve(value);
     };
+    // Ink refs stdin only once its input effect runs — a macrotask after
+    // render(). A frame with no timer of its own (the prompt, the model list)
+    // unrefs stdin on unmount, so between two such frames the event loop can
+    // empty in that gap and Node exits cleanly (code 0). Ref stdin up front to
+    // bridge the gap; Ink's unmount teardown unrefs it again, so the session
+    // still exits normally on its own.
+    if (process.stdin.isTTY) process.stdin.ref();
     const instance = render(build(done), { exitOnCtrlC: false });
   });
 }

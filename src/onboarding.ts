@@ -5,7 +5,14 @@
  * with an optional API key; remote providers require an API key. The result is
  * persisted to ~/.aish.
  */
-import { type Config, makeConfig, saveConfig } from './config.ts';
+import {
+  type Config,
+  type ProviderProfile,
+  activeProfile,
+  getProfile,
+  makeConfig,
+  saveConfig,
+} from './config.ts';
 import {
   DEFAULT_BASE_URLS,
   PROVIDER_LABELS,
@@ -15,17 +22,10 @@ import {
   isRemote,
 } from './providers/index.ts';
 import { color } from './term.ts';
-import {
-  cancelled,
-  intro,
-  isCancel,
-  logInfo,
-  logSuccess,
-  passwordPrompt,
-  selectOption,
-  spinner,
-  textPrompt,
-} from './ui.ts';
+import { field } from './tui/field.tsx';
+import { selectKeyed, selectList } from './tui/select-list.tsx';
+import { withStatus } from './tui/status.tsx';
+import { cancelled, intro, logInfo, logMessage, logSuccess } from './ui.ts';
 
 const DETECT_TIMEOUT_MS = 1500;
 const LOCAL_KINDS: ProviderKind[] = ['ollama', 'lmstudio'];
@@ -60,27 +60,43 @@ async function probe(baseUrl: string): Promise<string[] | null> {
   }
 }
 
-/** Interactive first-run setup. Saves and returns the new config. */
-export async function runOnboarding(): Promise<Config> {
+/**
+ * Interactive setup. Saves and returns the new config. When `current` is given
+ * (re-running via `/provider`) and the chosen provider matches it, the saved
+ * endpoint and API key are reused so the user is not re-asked for credentials
+ * they already have.
+ */
+export async function runOnboarding(current?: Config): Promise<Config> {
   intro(color.cyan('Welcome to aish. Let us get you set up.'));
 
   const detected = await collectDetected();
   const kind = await chooseProvider(detected);
 
-  const config = isRemote(kind) ? await setupRemote(kind) : await setupLocal(kind);
+  // Reuse a saved profile when re-configuring a provider that already exists.
+  const known = current ? getProfile(current, kind) : undefined;
+  const fresh = isRemote(kind) ? await setupRemote(kind, known) : await setupLocal(kind, known);
+
+  // Merge into the existing config so other providers and behaviour survive;
+  // first-run has no current and takes the fresh config as-is. `fresh.provider`
+  // stays active and its profile wins for that kind.
+  const config = current
+    ? {
+        ...fresh,
+        behavior: current.behavior,
+        providers: { ...current.providers, ...fresh.providers },
+      }
+    : fresh;
 
   await saveConfig(config);
   logSuccess(
-    `Saved config to ~/.aish/config.json, using ${PROVIDER_LABELS[kind]} (${config.model}).`,
+    `Saved config to ~/.aish/config.json, using ${PROVIDER_LABELS[kind]} (${activeProfile(config).model}).`,
   );
   return config;
 }
 
 async function collectDetected(): Promise<Detected[]> {
-  const spin = spinner();
-  spin.start('Detecting local providers');
-  const detected = await detectLocalProviders();
-  spin.stop(
+  const detected = await withStatus('Detecting local providers', detectLocalProviders());
+  logMessage(
     detected.length > 0
       ? `Found: ${detected.map((d) => PROVIDER_LABELS[d.kind]).join(', ')}`
       : 'No local provider detected',
@@ -89,40 +105,31 @@ async function collectDetected(): Promise<Detected[]> {
 }
 
 async function chooseProvider(detected: Detected[]): Promise<ProviderKind> {
-  const options: Array<{ value: ProviderKind; label: string; hint?: string }> = [];
-  for (const d of detected) {
-    options.push({
-      value: d.kind,
-      label: PROVIDER_LABELS[d.kind],
-      hint: `detected, ${d.models.length} model(s)`,
-    });
-  }
-  for (const kind of ['ollama', 'lmstudio'] as ProviderKind[]) {
-    if (!detected.some((d) => d.kind === kind)) {
-      options.push({ value: kind, label: PROVIDER_LABELS[kind], hint: 'local, not detected' });
-    }
-  }
-  options.push({ value: 'openai', label: PROVIDER_LABELS.openai, hint: 'remote, needs API key' });
-  options.push({
-    value: 'anthropic',
-    label: PROVIDER_LABELS.anthropic,
+  const detectedOpts = detected.map((d) => ({
+    value: d.kind,
+    hint: `detected, ${d.models.length} model(s)`,
+  }));
+  const localOpts = (['ollama', 'lmstudio'] as ProviderKind[])
+    .filter((kind) => !detected.some((d) => d.kind === kind))
+    .map((kind) => ({ value: kind, hint: 'local, not detected' }));
+  const remoteOpts = (['openai', 'anthropic', 'openrouter'] as ProviderKind[]).map((kind) => ({
+    value: kind,
     hint: 'remote, needs API key',
-  });
-  options.push({
-    value: 'openrouter',
-    label: PROVIDER_LABELS.openrouter,
-    hint: 'remote, needs API key',
-  });
+  }));
+  const options = [...detectedOpts, ...localOpts, ...remoteOpts].map((o) => ({
+    label: `${PROVIDER_LABELS[o.value]} — ${o.hint}`,
+    value: o.value,
+  }));
 
-  const choice = await selectOption('Choose a provider', options);
-  if (isCancel(choice)) cancelled();
+  const choice = await selectKeyed('Choose a provider', options);
+  if (choice === null) cancelled();
   return choice;
 }
 
-async function setupLocal(kind: ProviderKind): Promise<Config> {
+async function setupLocal(kind: ProviderKind, known?: ProviderProfile): Promise<Config> {
   // Local providers can live anywhere: prompt for the endpoint (default
-  // localhost) and an optional API key for endpoints behind auth.
-  const baseUrl = await promptBaseUrl(kind);
+  // localhost, or the saved one when re-running) and an optional API key.
+  const baseUrl = await promptBaseUrl(kind, known?.baseUrl);
   const apiKey = await promptOptionalKey();
 
   const model = await pickModel(kind, baseUrl, apiKey);
@@ -132,33 +139,39 @@ async function setupLocal(kind: ProviderKind): Promise<Config> {
   return makeConfig(kind, model, overrides);
 }
 
-async function setupRemote(kind: ProviderKind): Promise<Config> {
-  const key = await passwordPrompt(`Enter your ${PROVIDER_LABELS[kind]} API key`);
-  if (isCancel(key)) cancelled();
-  const apiKey = key.trim();
-  if (!apiKey) cancelled('An API key is required for remote providers.');
-
-  const baseUrl = DEFAULT_BASE_URLS[kind];
+async function setupRemote(kind: ProviderKind, known?: ProviderProfile): Promise<Config> {
+  // Reuse a saved key for the same provider; only ask when there is none.
+  const apiKey = known?.apiKey ?? (await promptRemoteKey(kind));
+  const baseUrl = known?.baseUrl ?? DEFAULT_BASE_URLS[kind];
   const model = await pickModel(kind, baseUrl, apiKey);
-  return makeConfig(kind, model, { apiKey });
+  return makeConfig(kind, model, { apiKey, baseUrl });
 }
 
-/** Prompt for the endpoint URL, pre-filled with the provider's default. */
-async function promptBaseUrl(kind: ProviderKind): Promise<string> {
-  const fallback = DEFAULT_BASE_URLS[kind];
-  const entered = await textPrompt('Endpoint URL', {
-    initialValue: fallback,
-    placeholder: fallback,
+/** Prompt for a required remote API key, aborting if absent. */
+async function promptRemoteKey(kind: ProviderKind): Promise<string> {
+  const key = await field(`Enter your ${PROVIDER_LABELS[kind]} API key`, {
+    mask: true,
+    placeholder: 'sk-…',
   });
-  if (isCancel(entered)) cancelled();
+  if (key === null) cancelled();
+  const apiKey = key.trim();
+  if (!apiKey) cancelled('An API key is required for remote providers.');
+  return apiKey;
+}
+
+/** Prompt for the endpoint URL, pre-filled with the saved or default value. */
+async function promptBaseUrl(kind: ProviderKind, saved?: string): Promise<string> {
+  const fallback = saved ?? DEFAULT_BASE_URLS[kind];
+  const entered = await field('Endpoint URL', { initialValue: fallback, placeholder: fallback });
+  if (entered === null) cancelled();
   const url = entered.trim().replace(/\/$/, '');
   return url || fallback;
 }
 
 /** Prompt for an optional API key (empty means none). */
 async function promptOptionalKey(): Promise<string> {
-  const key = await passwordPrompt('API key (optional, press Enter to skip)');
-  if (isCancel(key)) cancelled();
+  const key = await field('API key (optional, press Enter to skip)', { mask: true });
+  if (key === null) cancelled();
   return key.trim();
 }
 
@@ -168,31 +181,24 @@ async function pickModel(kind: ProviderKind, baseUrl: string, apiKey: string): P
     ? { kind, baseUrl, model: '', apiKey }
     : { kind, baseUrl, model: '' };
 
-  const spin = spinner();
-  spin.start('Fetching models');
   let models: string[] = [];
   try {
-    models = await createProvider(config).listModels();
-    spin.stop(`Found ${models.length} model(s)`);
+    models = await withStatus('Fetching models', createProvider(config).listModels());
   } catch {
-    spin.stop('Could not reach the endpoint to list models');
-    logInfo('Enter the model name manually.');
+    logInfo('Could not reach the endpoint to list models. Enter the model name manually.');
   }
   return chooseModel(models);
 }
 
 async function chooseModel(models: string[]): Promise<string> {
   if (models.length === 0) {
-    const typed = await textPrompt('Model name', { placeholder: 'e.g. llama3.1' });
-    if (isCancel(typed)) cancelled();
+    const typed = await field('Model name', { placeholder: 'e.g. llama3.1' });
+    if (typed === null) cancelled();
     const name = typed.trim();
     if (!name) cancelled('A model name is required.');
     return name;
   }
-  const choice = await selectOption(
-    'Choose a model',
-    models.map((m) => ({ value: m, label: m })),
-  );
-  if (isCancel(choice)) cancelled();
+  const choice = await selectList('Choose a model', models);
+  if (choice === null) cancelled();
   return choice;
 }

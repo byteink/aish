@@ -20,7 +20,7 @@ import { PROVIDER_LABELS } from './providers/index.ts';
 import { runInShell } from './runtime.ts';
 import { runInteractive } from './session.ts';
 import { color } from './term.ts';
-import { logError, logInfo, note } from './ui.ts';
+import { Cancelled, cancelNote, logError, logInfo, note } from './ui.ts';
 
 /** First non-flag token, or undefined if there is none. */
 function firstPositional(rawArgs: string[]): string | undefined {
@@ -58,13 +58,26 @@ async function ensureConfig(): Promise<Config> {
     logError((err as Error).message);
     process.exit(1);
   }
-  return runOnboarding();
+  try {
+    return await runOnboarding();
+  } catch (err) {
+    if (err instanceof Cancelled) {
+      cancelNote(err.message);
+      process.exit(130);
+    }
+    throw err;
+  }
 }
 
 function redact(config: Config): Record<string, unknown> {
-  const view: Record<string, unknown> = { ...config };
-  if (config.apiKey) view.apiKey = '••••••••';
-  return view;
+  const mask = '••••••••';
+  const providers = Object.fromEntries(
+    Object.entries(config.providers).map(([kind, p]) => [
+      kind,
+      p?.apiKey ? { ...p, apiKey: mask } : p,
+    ]),
+  );
+  return { ...config, providers };
 }
 
 const configSet = defineCommand({

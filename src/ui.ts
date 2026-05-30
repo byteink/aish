@@ -1,58 +1,39 @@
 /**
- * Thin adapter over @clack/prompts: the prompt and log primitives used by
- * first-run onboarding and top-level CLI messages. Pure terminal utilities
- * (colour, width, wrapping) live in ./term.ts so the Ink frames can share them.
+ * Terminal output primitives: coloured log lines and the cancellation signal
+ * shared by onboarding and the top-level CLI. Pure stdout writes with no prompt
+ * library, so the Ink frames remain the single owner of stdin — the source of
+ * the old clack/Ink raw-mode handoff bugs.
  */
-import * as p from '@clack/prompts';
-import type { Option } from '@clack/prompts';
-import { terminalRows, wrap } from './term.ts';
+import { color, wrap } from './term.ts';
 
-export const intro = (msg: string): void => p.intro(msg);
-export const note = (body: string, title?: string): void => p.note(body, title);
-export const logInfo = (msg: string): void => p.log.info(wrap(msg));
-export const logWarn = (msg: string): void => p.log.warn(wrap(msg));
-export const logError = (msg: string): void => p.log.error(wrap(msg));
-export const logSuccess = (msg: string): void => p.log.success(wrap(msg));
-export const logMessage = (msg: string): void => p.log.message(wrap(msg));
+/** Write one line to stdout. The single output primitive for plain transcript text. */
+export const write = (line: string): void => {
+  process.stdout.write(`${line}\n`);
+};
 
-/** True when the user aborted a prompt (Ctrl-C / Esc). */
-export const isCancel = p.isCancel;
+/**
+ * Raised when the user aborts a prompt (Ctrl-C / Esc) or omits a required
+ * value during onboarding. Throwing — rather than exiting — lets the caller
+ * decide: first-run setup exits the process, but `/provider` mid-session just
+ * returns to the REPL with the previous provider intact.
+ */
+export class Cancelled extends Error {}
 
 export function cancelled(msg = 'Cancelled.'): never {
-  p.cancel(msg);
-  process.exit(130);
+  throw new Cancelled(msg);
 }
 
-export async function selectOption<T extends string>(
-  message: string,
-  options: Array<{ value: T; label: string; hint?: string }>,
-): Promise<T | symbol> {
-  // clack's Option is a conditional type over the generic, which won't unify
-  // with our concrete element type; the cast is the documented escape hatch.
-  // maxItems caps the rendered window so a long model list scrolls instead of
-  // overflowing the terminal; short lists (e.g. the provider menu) are unaffected.
-  return p.select<T>({
-    message,
-    options: options as Option<T>[],
-    maxItems: Math.max(5, terminalRows() - 6),
-  });
-}
+export const intro = (msg: string): void => write(`\n${msg}`);
+export const logInfo = (msg: string): void => write(color.cyan(wrap(msg)));
+export const logError = (msg: string): void => write(color.red(wrap(msg)));
+export const logSuccess = (msg: string): void => write(color.green(wrap(msg)));
+export const logMessage = (msg: string): void => write(wrap(msg));
 
-export interface TextOpts {
-  placeholder?: string;
-  /** Pre-filled, editable value. */
-  initialValue?: string;
-  /** Value used when the field is submitted empty. */
-  defaultValue?: string;
-}
+/** A titled block of text (e.g. the config dump from `ai config`). */
+export const note = (body: string, title?: string): void => {
+  if (title) write(color.bold(title));
+  write(body);
+};
 
-export async function textPrompt(message: string, opts: TextOpts = {}): Promise<string | symbol> {
-  return p.text({ message, ...opts });
-}
-
-/** A clack spinner instance (start/stop). */
-export const spinner = (): ReturnType<typeof p.spinner> => p.spinner();
-
-export async function passwordPrompt(message: string): Promise<string | symbol> {
-  return p.password({ message });
-}
+/** Dim notice printed when first-run setup is cancelled. */
+export const cancelNote = (msg: string): void => write(color.dim(msg));

@@ -18,29 +18,36 @@ export function Spinner() {
   return <Text color="cyan">{SPINNER[i]}</Text>;
 }
 
-/** Minimal controlled input: typing, backspace, Enter (submit), Esc (cancel). */
+/**
+ * Minimal controlled input: typing, backspace, Enter (submit), Esc/Ctrl-C
+ * (cancel). With `mask`, the value is shown as dots so secrets like API keys
+ * never appear on screen.
+ */
 export function TextInput({
   value,
   placeholder,
+  mask,
   onChange,
   onSubmit,
   onCancel,
 }: Readonly<{
   value: string;
   placeholder?: string;
+  mask?: boolean;
   onChange: (v: string) => void;
   onSubmit: (v: string) => void;
   onCancel: () => void;
 }>) {
   useInput((input, key) => {
     if (key.return) return onSubmit(value);
-    if (key.escape) return onCancel();
+    if (key.escape || (key.ctrl && input === 'c')) return onCancel();
     if (key.backspace || key.delete) return onChange(value.slice(0, -1));
     if (input && !key.ctrl && !key.meta) onChange(value + input);
   });
+  const shown = mask ? '•'.repeat(value.length) : value;
   return (
     <Text>
-      {value ? <Text>{value}</Text> : <Text dimColor>{placeholder ?? ''}</Text>}
+      {value ? <Text>{shown}</Text> : <Text dimColor>{placeholder ?? ''}</Text>}
       <Text inverse> </Text>
     </Text>
   );

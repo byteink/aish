@@ -5,29 +5,34 @@
  * interactive unit — the prompt, the suggestion, the model picker — is a
  * short-lived Ink frame. Slash commands control the session.
  */
-import { type Config, saveConfig, toProviderConfig } from './config.ts';
+import { helpText } from './commands.ts';
+import {
+  type Config,
+  type ProviderProfile,
+  activate,
+  activeProfile,
+  getProfile,
+  listProviders,
+  profileToProviderConfig,
+  saveConfig,
+  toProviderConfig,
+} from './config.ts';
 import { type ShellContext, gatherContext } from './context.ts';
 import { runSuggestionFlow } from './flow.ts';
 import { runOnboarding } from './onboarding.ts';
 import { buildInteractivePrompt } from './prompt.ts';
-import { type Message, PROVIDER_LABELS, type Provider, createProvider } from './providers/index.ts';
+import {
+  type Message,
+  PROVIDER_LABELS,
+  type Provider,
+  type ProviderKind,
+  createProvider,
+} from './providers/index.ts';
 import { color } from './term.ts';
 import { promptLine } from './tui/prompt-line.tsx';
-import { selectList } from './tui/select-list.tsx';
-
-/** Print one plain transcript line (no clack chrome, to match the Ink frames). */
-const say = (msg: string): void => {
-  process.stdout.write(`${msg}\n`);
-};
-
-const SLASH_HELP = [
-  '/exit      end the session (aliases: /quit, /bye)',
-  '/clear     clear conversation history',
-  '/model     switch model',
-  '/provider  switch provider (re-run setup)',
-  '/think     toggle model reasoning on/off',
-  '/help      show this help',
-].join('\n');
+import { selectKeyed, selectList } from './tui/select-list.tsx';
+import { withStatus } from './tui/status.tsx';
+import { Cancelled, write as say } from './ui.ts';
 
 export class Session {
   private config: Config;
@@ -45,11 +50,13 @@ export class Session {
   /** Run the REPL until the user exits or aborts. */
   async run(): Promise<void> {
     say(color.cyan('aish interactive session'));
-    say(color.dim(`${PROVIDER_LABELS[this.config.provider]} · ${this.config.model}`));
+    say(
+      color.dim(`${PROVIDER_LABELS[this.config.provider]} · ${activeProfile(this.config).model}`),
+    );
     say(color.dim('Type a request, or /help for commands.'));
 
     for (;;) {
-      const input = await promptLine(color.cyan('aish ›'));
+      const input = await promptLine(color.cyan('aish ›'), { commands: true });
       if (input === null) break;
       const line = input.trim();
       if (!line) continue;
@@ -115,7 +122,7 @@ export class Session {
         await this.toggleThink();
         return true;
       case '/help':
-        say(color.dim(SLASH_HELP));
+        say(color.dim(helpText()));
         return true;
       default:
         say(color.yellow(`Unknown command: ${cmd}. Try /help.`));
@@ -145,22 +152,85 @@ export class Session {
     const choice = await selectList('Switch model', models);
     if (choice === null) return;
 
-    this.config = { ...this.config, model: choice };
+    this.config = activate(this.config, this.config.provider, choice);
     this.provider = createProvider(toProviderConfig(this.config));
     await saveConfig(this.config);
     say(color.dim(`Now using ${choice}.`));
   }
 
+  /** List configured providers for a quick switch, plus an "add" action. */
   private async switchProvider(): Promise<void> {
-    // The Ink prompt frame unrefs stdin on unmount (its raw-mode teardown), so
-    // the clack prompts below would leave the event loop with nothing to keep it
-    // alive and Node would exit cleanly the moment a prompt awaits input. Re-ref
-    // stdin so onboarding's prompts hold the process open.
-    process.stdin.ref();
-    const config = await runOnboarding();
-    this.config = config;
-    this.provider = createProvider(toProviderConfig(config));
-    say(color.dim(`Switched to ${PROVIDER_LABELS[config.provider]} · ${config.model}.`));
+    const options: Array<{ label: string; value: ProviderKind | 'add' }> = listProviders(
+      this.config,
+    ).map((kind) => ({ label: this.providerItem(kind), value: kind }));
+    options.push({ label: 'Add a provider…', value: 'add' });
+
+    const choice = await selectKeyed('Switch provider', options);
+    if (choice === null) return;
+    if (choice === 'add') return this.addProvider();
+    await this.activateProvider(choice);
+  }
+
+  /** A menu line for a configured provider: label, last model, active marker. */
+  private providerItem(kind: ProviderKind): string {
+    const model = getProfile(this.config, kind)?.model ?? '';
+    const active = kind === this.config.provider ? ' (active)' : '';
+    return `${PROVIDER_LABELS[kind]} · ${model}${active}`;
+  }
+
+  /** Switch to a configured provider, then pick its model. */
+  private async activateProvider(kind: ProviderKind): Promise<void> {
+    const profile = getProfile(this.config, kind);
+    if (!profile) return;
+
+    // Switch even when the endpoint is unreachable: fall back to the saved
+    // model so a temporarily-down provider can still be selected.
+    const models = await this.modelsFor(kind, profile);
+    let model = profile.model;
+    if (models.length > 0) {
+      const choice = await selectList(`Model for ${PROVIDER_LABELS[kind]}`, models);
+      if (choice === null) return;
+      model = choice;
+    }
+
+    this.config = activate(this.config, kind, model);
+    this.provider = createProvider(toProviderConfig(this.config));
+    await saveConfig(this.config);
+    say(color.dim(`Now using ${PROVIDER_LABELS[kind]} · ${model}.`));
+  }
+
+  /** List a provider's models, or [] (with a notice) if the endpoint fails. */
+  private async modelsFor(kind: ProviderKind, profile: ProviderProfile): Promise<string[]> {
+    const provider = createProvider(profileToProviderConfig(kind, profile));
+    try {
+      return await withStatus('Fetching models', provider.listModels());
+    } catch (err) {
+      say(
+        color.yellow(
+          `Could not list models (${(err as Error).message}); keeping ${profile.model}.`,
+        ),
+      );
+      return [];
+    }
+  }
+
+  /** Run onboarding to configure a new (or replacement) provider. */
+  private async addProvider(): Promise<void> {
+    try {
+      this.config = await runOnboarding(this.config);
+      this.provider = createProvider(toProviderConfig(this.config));
+      const { provider } = this.config;
+      say(
+        color.dim(
+          `Switched to ${PROVIDER_LABELS[provider]} · ${activeProfile(this.config).model}.`,
+        ),
+      );
+    } catch (err) {
+      // Aborting setup mid-session keeps the current provider; only first-run
+      // onboarding treats a cancel as fatal.
+      if (err instanceof Cancelled) return say(color.dim('Provider unchanged.'));
+      throw err;
+    }
   }
 }
 

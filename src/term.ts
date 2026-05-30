@@ -1,7 +1,7 @@
 /**
  * Pure terminal-presentation utilities: NO_COLOR-aware ANSI colouring and
- * width-aware word wrapping. No dependency on any prompt library, so both the
- * Ink frames and the clack adapter can share them.
+ * width-aware word wrapping. No dependency on any prompt library, so all the
+ * Ink frames and stdout log helpers can share them.
  */
 const COLOR_ENABLED =
   !process.env.NO_COLOR && process.stdout.isTTY === true && process.env.TERM !== 'dumb';
@@ -19,8 +19,8 @@ export const color = {
   cyan: paint(36, 39),
 };
 
-// clack frames every line with a "│  " gutter and the box border, so reserve a
-// few columns. Floor keeps things sane on absurdly narrow terminals.
+// Reserve a few columns as a right-hand margin so wrapped lines never butt
+// against the edge. Floor keeps things sane on absurdly narrow terminals.
 const GUTTER = 6;
 const MIN_WIDTH = 24;
 const FALLBACK_WIDTH = 80;
@@ -42,7 +42,7 @@ export function terminalRows(): number {
 /**
  * Word-wrap text to the terminal width, preserving existing line breaks and
  * hard-breaking tokens longer than the line (e.g. URLs or long flags). Used to
- * keep clack boxes and messages inside the actual terminal.
+ * keep log messages inside the actual terminal.
  */
 export function wrap(text: string, width = terminalColumns() - GUTTER): string {
   const limit = Math.max(MIN_WIDTH, width);
