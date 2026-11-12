@@ -184,11 +184,11 @@ npm version patch          # or minor / major
 git push --follow-tags
 ```
 
-Required GitHub Actions secrets:
+Configure npm trusted publishing for `@byteink/aish` with owner `byteink`,
+repository `aish`, workflow `release.yml`, and direct publishing allowed.
 
-- `NPM_TOKEN`: granular/automation npm token with publish rights for the
-  `@byteink` scope. Never commit it; never commit an `.npmrc` containing a token.
-- `HOMEBREW_TAP_GITHUB_TOKEN`: token with push access to `byteink/homebrew-tap`.
+Required GitHub Actions secret: `HOMEBREW_TAP_GITHUB_TOKEN`, a token with push
+access to `byteink/homebrew-tap`.
 
 The `prepublishOnly` script rebuilds `dist` and runs typecheck + lint, so a
 broken build can never be published.

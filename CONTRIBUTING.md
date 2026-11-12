@@ -37,7 +37,9 @@ a broken build can never reach npm.
 ## Releasing
 
 Maintainers only. Tag-driven; see the "Maintainer: releasing" section of the
-[README](README.md). Required secrets: `NPM_TOKEN`, `HOMEBREW_TAP_GITHUB_TOKEN`.
+[README](README.md). Configure npm trusted publishing for `@byteink/aish` with
+owner `byteink`, repository `aish`, workflow `release.yml`, and direct publishing
+allowed. Required secret: `HOMEBREW_TAP_GITHUB_TOKEN`.
 
 ```sh
 npm version patch        # bump + tag
