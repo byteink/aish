@@ -1,6 +1,6 @@
 {
   "name": "@byteink/aish",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "AI shell assistant that turns natural language into shell commands. Local-first (Ollama, LM Studio), with OpenAI and Anthropic support.",
   "keywords": [
     "ai",
@@ -52,7 +52,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.4",
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
     "citty": "^0.2.2",

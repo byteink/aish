@@ -6,22 +6,27 @@ on:
 
 permissions:
   contents: write # create the GitHub Release and upload assets
-  id-token: write # npm provenance
 
 jobs:
   release:
     name: Publish npm + binaries + formula
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
-      # registry-url wires NODE_AUTH_TOKEN into .npmrc for npm publish.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 22
+          node-version: 24.22.3
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Set up npm for trusted publishing
+        run: npm install --global npm@11.21.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -58,8 +63,6 @@ jobs:
           else
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build standalone binaries
         run: |
